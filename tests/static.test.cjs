@@ -1,0 +1,18 @@
+const fs=require('node:fs');
+const vm=require('node:vm');
+const assert=require('node:assert/strict');
+const html=fs.readFileSync('index.html','utf8');
+const client=fs.readFileSync('supabase/client.js','utf8');
+const sql=fs.readFileSync('supabase/migrations/20261115000000_initial_schema.sql','utf8');
+const inline=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(x=>x[1]).filter(Boolean);
+assert.equal(inline.length,1,'Expected exactly one inline application script');
+new vm.Script(inline[0],{filename:'index.html'});
+new vm.Script(client,{filename:'supabase/client.js'});
+for(const method of ['homesquareLoadProperties','homesquareCreateDraft','homesquareSendEnquiry','homesquareLoadMyProperties','homesquareLoadEnquiries','homesquareSubmitForReview','homesquareDeleteDraft'])assert.ok(client.includes(method),method);
+for(const table of ['profiles','properties','enquiries'])assert.ok(sql.includes('alter table public.'+table+' enable row level security'),table+' RLS');
+assert.ok(!html.includes('function togglePublish('),'No insecure browser publish button');
+assert.ok(html.includes('homesquareLoadMyProperties()'),'Dashboard should load server listings');
+assert.ok(html.includes('homesquareLoadEnquiries(id)'),'Seller inbox should load server enquiries');
+assert.ok(html.includes('name="amount"'),'Enquiries should support indicative offers');
+assert.ok(html.includes('homesquareSignIn(event)'),'Account form must exist');
+console.log('PASS: JS parses, server integrations present, RLS declared, unsafe publish removed');

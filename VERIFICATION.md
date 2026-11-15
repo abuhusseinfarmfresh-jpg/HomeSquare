@@ -64,3 +64,15 @@ Stripe is deliberately excluded. GitHub source code was updated for buyer/seller
 - Staff verification now requires an uploaded evidence file. **Evidence presence is not proof of validity; staff must independently assess authenticity and seller authority.**
 - Added source assertions for privacy and verification controls.
 - **Still unverified:** new migrations deployed, storage policies functioning in Supabase, real two-account browser tests, and legal/privacy compliance.
+
+## Update — previously partial features completed in source
+- Buyer activity dashboard now displays enquiries, inspections, offers and message history.
+- Seller dashboard now exposes messages, photo gallery, ownership declaration and evidence actions.
+- Public property cards asynchronously display the first approved property photo when available.
+- Photography/signboard booking requests now capture preferred date and contact phone.
+- Seller can view their service requests; staff can list requests and update statuses, dates and notes through staff-gated RPC.
+- Added security-invoker activity view and expanded static regression checks.
+- **Important:** in-app activity is not push/email notifications. Real-time notification delivery, read receipts and attachments are not implemented.
+- **Important:** production booking fulfilment, staffing and photography operations require real business procedures; this code only manages requests/statuses.
+- **Not yet verified:** migration deployment, CI result, live two-account flow, mobile/browser usability, actual image rendering and secure evidence access.
+- **Do not claim production completion until live tests pass.** Stripe remains excluded.

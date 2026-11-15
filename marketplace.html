@@ -248,14 +248,20 @@ async function requestService(id){
  const phone=prompt('Contact phone number (optional)')||'';
  try{await window.homesquareRequestService(id,choice.toLowerCase(),details,preferredAt,phone);alert('Request saved. Booking and payment are not yet active.')}catch(e){alert(e.message)}
 }
-async function requestInspection(id){
- const date=prompt('Preferred inspection date and time (e.g. 2026-12-01T14:00)');if(!date)return;
- try{await window.homesquareRequestInspection(id,date);alert('Inspection request submitted; awaiting owner confirmation.')}catch(e){alert(e.message)}
+function openBuyerAction(id,kind){
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent=kind==='inspection'?'Request an inspection':'Make an offer';
+ const inspection=kind==='inspection';
+ $('modalBody').innerHTML='<div class="buyer-action-panel"><p class="muted">'+(inspection?'Suggest a time to inspect this property. The owner can confirm or decline your request.':'Send the owner your indicative offer. This is not a binding contract of sale.')+'</p><form onsubmit="saveBuyerAction(event,\''+id+'\',\''+kind+'\')">'+(inspection?'<div class="field"><label>Preferred inspection date and time</label><input required type="datetime-local" name="date"></div>':'<div class="field"><label>Offer amount (AUD)</label><input required type="number" min="1" step="1" name="amount" placeholder="e.g. 850000"></div>')+'<div class="field"><label>Message to owner (optional)</label><textarea name="message" maxlength="2000" rows="4" placeholder="'+(inspection?'Any preferred arrangements or questions?':'Include any conditions or details you want the owner to know.')+'"></textarea></div><p class="small muted">You must sign in to submit. Your request will be visible to the owner in their dashboard.</p><button class="btn" type="submit">'+(inspection?'Send inspection request':'Submit indicative offer')+'</button></form></div>';
 }
-async function submitOffer(id){
- const amount=prompt('Indicative offer amount in AUD');if(!amount)return;
- const message=prompt('Optional conditions or message')||'';
- try{await window.homesquareSubmitOffer(id,amount,message);alert('Offer recorded. This is not a legally binding property contract.')}catch(e){alert(e.message)}
+function requestInspection(id){openBuyerAction(id,'inspection')}
+function submitOffer(id){openBuyerAction(id,'offer')}
+async function saveBuyerAction(e,id,kind){
+ e.preventDefault();const f=new FormData(e.target),button=e.target.querySelector('button[type=submit]');button.disabled=true;button.textContent='Submitting…';
+ try{
+  if(kind==='inspection'){const date=String(f.get('date')||'');if(!date||new Date(date)<=new Date())throw new Error('Choose a future date and time');await window.homesquareRequestInspection(id,date,String(f.get('message')||''))}
+  else{const amount=Number(f.get('amount'));if(!Number.isFinite(amount)||amount<=0)throw new Error('Enter a valid offer amount');await window.homesquareSubmitOffer(id,amount,String(f.get('message')||''))}
+  closeModal();alert(kind==='inspection'?'Inspection requested. The owner can confirm or decline.':'Indicative offer submitted. This is not a legally binding contract.');
+ }catch(error){alert('Unable to submit: '+error.message);button.disabled=false;button.textContent=kind==='inspection'?'Send inspection request':'Submit indicative offer'}
 }
 async function messageOwner(id){
  const message=prompt('Message to the owner');if(!message)return;

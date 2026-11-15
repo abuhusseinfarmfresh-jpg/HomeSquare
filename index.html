@@ -59,8 +59,8 @@ async function viewActivity(id){
 async function viewConversations(id){
  $('overlay').classList.remove('hidden');$('modalTitle').textContent='Buyer conversations';$('modalBody').textContent='Loading…';
  try{
- const [enquiries,inspections,offers]=await Promise.all([window.homesquareLoadEnquiries(id),window.homesquareLoadInspections(id),window.homesquareLoadOffers(id)]);
- const buyerIds=[...new Set([...enquiries,...inspections,...offers].map(x=>x.buyer_id).filter(Boolean))];
+ const [enquiries,inspections,offers,messages]=await Promise.all([window.homesquareLoadEnquiries(id),window.homesquareLoadInspections(id),window.homesquareLoadOffers(id),window.homesquareLoadPropertyMessages(id)]);
+ const buyerIds=[...new Set([...enquiries,...inspections,...offers,...messages].map(x=>x.buyer_id).filter(Boolean))];
  $('modalBody').innerHTML=buyerIds.length?buyerIds.map(buyerId=>'<div class="dashboard"><p>Buyer reference: '+escapeHTML(buyerId.slice(0,8))+'</p><button class="btn alt" onclick="openConversation(\''+id+'\',\''+buyerId+'\')">Open conversation</button></div>').join(''):'<p>No buyer conversations yet.</p>';
  }catch(e){$('modalBody').textContent=e.message}
 }

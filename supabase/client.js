@@ -34,13 +34,14 @@ window.homesquareSignOut=async function(){
  notify('Signed out.');
 };
 window.homesquareLoadProperties=async function(){
-const {data,error}=await client.from('properties').select('id,address,suburb,state,property_type,price,beds,baths,status').eq('status','published').order('created_at',{ascending:false}).limit(100);
+const {data,error}=await client.from('properties').select('id,address,suburb,state,property_type,price,price_max,headline,description,beds,baths,status').eq('status','published').order('created_at',{ascending:false}).limit(100);
 if(error)throw error;return data;
 };
 function validateListingFields(fields,partial=false){
- const allowed=['address','suburb','state','property_type','price','beds','baths'];
+ const required=['address','suburb','state','property_type','price','beds','baths'];
+ const allowed=[...required,'headline','description','price_max'];
  const result=Object.fromEntries(Object.entries(fields||{}).filter(([k])=>allowed.includes(k)));
- if(!partial&&allowed.some(k=>result[k]===undefined))throw new Error('Complete all required listing details');
+ if(!partial&&required.some(k=>result[k]===undefined))throw new Error('Complete all required listing details');
  for(const k of ['address','suburb','state','property_type']){
   if(result[k]===undefined)continue;
   result[k]=String(result[k]).trim();
@@ -51,6 +52,18 @@ function validateListingFields(fields,partial=false){
   if(result[k]===undefined)continue;
   result[k]=Number(result[k]);
   if(!Number.isFinite(result[k])||result[k]<0||(k==='price'&&result[k]===0)||(k!=='price'&&(!Number.isInteger(result[k])||result[k]>100)))throw new Error('Enter a valid '+k);
+ }
+ for(const [field,maxLength] of [['headline',180],['description',5000]]){
+  if(result[field]===undefined)continue;
+  result[field]=String(result[field]??'').trim();
+  if(result[field].length>maxLength)throw new Error('Shorten the listing '+field);
+ }
+ if(result.price_max!==undefined){
+  result.price_max=result.price_max===null||result.price_max===''?null:Number(result.price_max);
+  if(result.price_max!==null&&(!Number.isFinite(result.price_max)||result.price_max<=0||
+     (result.price!==undefined&&(result.price_max<=result.price||result.price_max-result.price>100000)))){
+   throw new Error('Enter a price guide with a higher maximum and a range of at most $100,000');
+  }
  }
  return result;
 }
@@ -67,7 +80,7 @@ if(error)throw error;return data;
 window.homesquareLoadMyProperties=async function(){
  const {data:{user},error:authError}=await client.auth.getUser();
  if(authError||!user)throw new Error('Sign in to view your listings');
- const {data,error}=await client.from('properties').select('id,address,suburb,state,property_type,price,beds,baths,status,created_at').eq('owner_id',user.id).order('created_at',{ascending:false});
+ const {data,error}=await client.from('properties').select('id,address,suburb,state,property_type,price,price_max,headline,description,beds,baths,status,created_at').eq('owner_id',user.id).order('created_at',{ascending:false});
  if(error)throw error;return data;
 };
 window.homesquareUpdateDraft=async function(id,fields){

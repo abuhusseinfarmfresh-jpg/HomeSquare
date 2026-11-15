@@ -93,3 +93,29 @@ test('account switches clear private data and ignore late seller responses',asyn
  await new Promise(resolve=>setImmediate(resolve));
  assert.match(dashboard.innerHTML,/No properties listed yet/);
 });
+
+test('listing writes retain marketing copy and valid price guides',async()=>{
+ const writes=[];
+ const result=fields=>{
+  const query={eq:()=>query,select:()=>query,single:async()=>({data:fields})};
+  writes.push(fields);
+  return query;
+ };
+ const db={
+  auth:{getUser:async()=>({data:{user:{id:'seller'}}}),onAuthStateChange(){}},
+  from:()=>({insert:result,update:result}),
+ };
+ const window={HOMESQUARE_SUPABASE_URL:'https://example.invalid',HOMESQUARE_SUPABASE_PUBLISHABLE_KEY:'test',supabase:{createClient:()=>db}};
+ new vm.Script(client).runInNewContext({window});
+ const details={address:'QA Way',suburb:'Sydney',state:'NSW',property_type:'House',price:900000,beds:3,baths:2};
+ await window.homesquareCreateDraft({...details,headline:'  Sydney home ',description:'Spacious kitchen',price_max:990000});
+ assert.equal(writes[0].headline,'Sydney home');
+ assert.equal(writes[0].description,'Spacious kitchen');
+ assert.equal(writes[0].price_max,990000);
+ await window.homesquareUpdateDraft('draft',{headline:'New headline',price:950000,price_max:''});
+ assert.equal(writes[1].headline,'New headline');
+ assert.equal(writes[1].price_max,null);
+ await assert.rejects(window.homesquareCreateDraft({...details,price_max:1000001}),/at most/);
+ await window.homesquareCreateDraft(details);
+ assert.equal(writes[2].price_max,undefined);
+});

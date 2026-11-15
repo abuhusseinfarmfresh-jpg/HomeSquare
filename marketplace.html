@@ -315,7 +315,7 @@ async function showPhotos(id){
 }
 async function deletePhoto(propertyId,id,path){
  if(!confirm('Remove this photo?'))return;
- try{await window.homesquareDeletePhoto({id,storage_path:path});await showPhotos(propertyId)}catch(e){alert(e.message)}
+ try{await window.homesquareDeletePhoto({id,property_id:propertyId});await showPhotos(propertyId)}catch(e){alert(e.message)}
 }
 async function showStaff(){
  pages('staffPage');$('staffQueue').textContent='Checking staff access…';

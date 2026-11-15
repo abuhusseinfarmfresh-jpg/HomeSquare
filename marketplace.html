@@ -112,14 +112,18 @@ const listings=[];const $=id=>document.getElementById(id);function escapeHTML(v)
  }));
 }
 function renderFeatured(){$('featured').innerHTML='<div class="empty">Loading properties…</div>';if(window.homesquareBackendReady)window.homesquareLoadProperties().then(data=>{$('featured').innerHTML=data.slice(0,3).map(x=>card({...x,type:x.property_type,published:true})).join('')||'<div class="empty">No published properties yet.</div>';hydratePropertyPhotos('featured')}).catch(e=>{$('featured').textContent='Unable to load properties: '+e.message});else $('featured').textContent='Marketplace connection unavailable.'}function renderResults(){if(window.homesquareBackendReady){window.homesquareLoadProperties().then(data=>{let q=$('query').value.toLowerCase(),t=$('type').value,b=Number($('budget').value)||Infinity;let found=data.filter(x=>(!q||(x.address+' '+x.suburb+' '+x.state).toLowerCase().includes(q))&&(!t||x.property_type===t)&&Number(x.price)<=b);$('results').innerHTML=found.map(x=>card({...x,type:x.property_type})).join('')||'<div class="empty">No properties match this search yet.</div>';hydratePropertyPhotos('results')}).catch(e=>{$('results').textContent='Unable to load properties: '+e.message});return}let q=$('query').value.toLowerCase(),t=$('type').value,b=Number($('budget').value)||Infinity;$('results').textContent='Marketplace connection unavailable.'}async function renderDashboard(){
+ const revision=accountRevision;
+ if(!accountUserId){$('dashboard').textContent='Sign in to view your listings.';return}
  if(window.homesquareBackendReady){
   $('dashboard').textContent='Loading your listings…';
   try{
-   const mine=await window.homesquareLoadMyProperties();sellerListingsCache=mine;
+   const mine=await window.homesquareLoadMyProperties();
+   if(revision!==accountRevision)return;
+   sellerListingsCache=mine;
    const draftCount=mine.filter(l=>l.status==='draft').length,reviewCount=mine.filter(l=>l.status==='pending_review').length,publishedCount=mine.filter(l=>l.status==='published').length;
    const stats='<div class="seller-summary"><div class="seller-stat"><strong>'+draftCount+'</strong><span>Drafts</span></div><div class="seller-stat"><strong>'+reviewCount+'</strong><span>In review</span></div><div class="seller-stat"><strong>'+publishedCount+'</strong><span>Published</span></div></div>';
    $('dashboard').innerHTML=stats+(mine.length?mine.map(l=>'<article class="seller-listing"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap"><div><h3>'+escapeHTML(l.address)+'</h3><p class="muted">'+escapeHTML(l.suburb)+', '+escapeHTML(l.state)+' · '+escapeHTML(l.property_type||'Home')+'</p><strong>'+money(l.price)+'</strong></div><span class="seller-status">'+escapeHTML(l.status.replaceAll('_',' '))+'</span></div><div class="row">'+(l.status==='draft'?'<button class="btn alt" onclick="editDraft(\''+l.id+'\')">Edit details</button><button class="btn" onclick="submitReview(\''+l.id+'\')">Submit for review</button><button class="btn alt" onclick="removeListing(\''+l.id+'\')">Delete draft</button>':'')+'<button class="btn alt" onclick="showPhotos(\''+l.id+'\')">Manage photos</button><button class="btn alt" onclick="viewEnquiries(\''+l.id+'\')">Enquiries</button><button class="btn alt" onclick="viewConversations(\''+l.id+'\')">Messages</button><button class="btn alt" onclick="viewActivity(\''+l.id+'\')">Inspections & offers</button><button class="btn alt" onclick="declareOwnership(\''+l.id+'\')">Ownership</button><button class="btn alt" onclick="uploadEvidence(\''+l.id+'\')">Evidence</button><button class="btn alt" onclick="requestService(\''+l.id+'\')">Photography / signboard</button></div></article>').join(''):'<div class="empty"><h3>No properties listed yet</h3><p>Start with your first property listing. Your drafts and enquiries will appear here.</p><button class="btn" onclick="openListingWizard()">Create a listing</button></div>');
-  }catch(e){$('dashboard').textContent='Unable to load your listings: '+e.message}
+  }catch(e){if(revision===accountRevision)$('dashboard').textContent='Unable to load your listings: '+e.message}
   return;
  }
  $('dashboard').innerHTML='<div class="empty">Connect to Supabase to manage listings securely.</div>';
@@ -185,19 +189,30 @@ async function advanceListing(e){
  e.preventDefault();Object.assign(listingDraft,Object.fromEntries(new FormData(e.target)));
  if(listingStep===2){const min=Number(listingDraft.price),max=Number(listingDraft.maxPrice);if(!min||min<1||!max||max<min||(listingDraft.pricing==='Price guide'&&max-min>100000)||(listingDraft.pricing==='Fixed price'&&max!==min)){alert('Enter a valid fixed price (equal minimum and maximum) or a guide no wider than $100,000.');return}}
  if(listingStep<8){listingStep++;renderListingStep();$('overlay').scrollTop=0;return}
- await createListing({preventDefault(){},target:{[Symbol.iterator]:undefined}},listingDraft);
+ const button=e.target.querySelector('button[type=submit]');
+ button.disabled=true;
+ button.textContent='Saving draft…';
+ try{await createListing({preventDefault(){}},{...listingDraft})}
+ finally{button.disabled=false;button.textContent='Save draft listing'}
 }
 function openModal(kind){if(kind==='listing'){openListingWizard();return}document.body.style.overflow='';$('overlay').classList.remove('hidden');$('modalTitle').textContent='How HomeSquare works';$('modalBody').innerHTML='<p>Owners create and manage property listings, receive enquiries, organise inspections and review offers directly.</p><p>Buyers browse homes and contact owners. Conveyancers or solicitors handle contracts and settlement.</p><p class="notice">HomeSquare is an owner-direct advertising marketplace, not a real estate agency.</p>'}
-function field(label,name,type){return '<div class="field"><label>'+label+'</label><input required name="'+name+'" type="'+type+'" '+(type==='number'?'min="0"':'')+'></div>'}function closeModal(){$('overlay').classList.add('hidden');$('overlay').classList.remove('wizard-overlay');document.body.style.overflow=''}async function createListing(e,fieldsOverride=null){e.preventDefault();let d=fieldsOverride||Object.fromEntries(new FormData(e.target));if(window.homesquareBackendReady){try{const current=await window.homesquareDb.auth.getUser();if(!current.data.user){listingAwaitingSignIn=true;closeModal();goToAccount();const msg=document.getElementById('accountMessage');if(msg)msg.textContent='Your listing details are kept on this page. Sign in to continue saving your draft.';return}const created=await window.homesquareCreateDraft({address:d.address,suburb:d.suburb,state:d.state,property_type:d.type,price:Number(d.price),beds:Number(d.beds),baths:Number(d.baths)});let failed=[];for(const photo of listingPhotoFiles){try{await window.homesquareUploadPhoto(created.id,photo)}catch(err){failed.push(photo.name+': '+err.message)}}closeModal();const uploadedCount=listingPhotoFiles.length-failed.length;listingPhotoFiles=[];await showDashboard();if(failed.length)alert('Draft saved, but some photos could not be uploaded. You can retry from the seller dashboard.\n'+failed.join('\n'));else alert('Your property draft'+(d.address?' at '+d.address:'')+' has been saved'+(uploadedCount?' with '+uploadedCount+' photo(s)':'')+'. You can manage it from your dashboard.')}catch(error){alert('Unable to save draft: '+error.message)}return}alert('Marketplace connection unavailable. Please try again later.')}async function viewProperty(id){
+function field(label,name,type){return '<div class="field"><label>'+label+'</label><input required name="'+name+'" type="'+type+'" '+(type==='number'?'min="0"':'')+'></div>'}function resetModalBody(){
+ const previous=$('modalBody'), body=previous.cloneNode(false);
+ previous.replaceWith(body);
+ return body;
+}
+function closeModal(){resetModalBody();$('modalTitle').textContent='HomeSquare';$('overlay').classList.add('hidden');$('overlay').classList.remove('wizard-overlay');document.body.style.overflow=''}async function createListing(e,fieldsOverride=null){e.preventDefault();const revision=accountRevision;let d=fieldsOverride||Object.fromEntries(new FormData(e.target));if(window.homesquareBackendReady){try{const current=await window.homesquareDb.auth.getUser();if(revision!==accountRevision)return;if(!current.data.user){listingAwaitingSignIn=true;closeModal();goToAccount();const msg=document.getElementById('accountMessage');if(msg)msg.textContent='Your listing details are kept on this page. Sign in to continue saving your draft.';return}const created=await window.homesquareCreateDraft({address:d.address,suburb:d.suburb,state:d.state,property_type:d.type,price:Number(d.price),beds:Number(d.beds),baths:Number(d.baths)});let failed=[];for(const photo of listingPhotoFiles){if(revision!==accountRevision)return;try{await window.homesquareUploadPhoto(created.id,photo)}catch(err){failed.push(photo.name+': '+err.message)}}if(revision!==accountRevision)return;closeModal();const uploadedCount=listingPhotoFiles.length-failed.length;listingPhotoFiles=[];await showDashboard();if(revision!==accountRevision)return;if(failed.length)alert('Draft saved, but some photos could not be uploaded. You can retry from the seller dashboard.\n'+failed.join('\n'));else alert('Your property draft'+(d.address?' at '+d.address:'')+' has been saved'+(uploadedCount?' with '+uploadedCount+' photo(s)':'')+'. You can manage it from your dashboard.')}catch(error){if(revision===accountRevision)alert('Unable to save draft: '+error.message)}return}alert('Marketplace connection unavailable. Please try again later.')}async function viewProperty(id){
  if(!window.homesquareBackendReady){alert('Property listings are temporarily unavailable.');return}
- $('overlay').classList.remove('hidden');$('modalTitle').textContent='Property details';$('modalBody').textContent='Loading property…';
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Property details';
+ const modalBody=resetModalBody();modalBody.textContent='Loading property…';
  try{
   const listings=await window.homesquareLoadProperties(),p=listings.find(x=>x.id===id);
-  if(!p){$('modalBody').textContent='This property is no longer publicly available.';return}
+  if(!p){modalBody.textContent='This property is no longer publicly available.';return}
   const photos=await window.homesquareLoadPhotos(id).catch(()=>[]);
+  if(!modalBody.isConnected)return;
   $('modalTitle').textContent=p.address||'Property details';
-  $('modalBody').innerHTML='<div class="property-detail">'+(photos.length?'<div class="property-gallery">'+photos.map((photo,i)=>'<img loading="lazy" alt="Property photo '+(i+1)+'" src="'+escapeHTML(photo.url)+'">').join('')+'</div>':'<div class="property-no-photo">Property photographs coming soon</div>')+'<p class="muted">'+escapeHTML([p.suburb,p.state].filter(Boolean).join(', '))+'</p><h2>'+money(p.price)+'</h2><p>'+escapeHTML(p.property_type||'Property')+' · '+escapeHTML(p.beds||0)+' bedrooms · '+escapeHTML(p.baths||0)+' bathrooms</p><p class="muted">Advertised directly by the owner. HomeSquare is not a real estate agency. Buyers and sellers use their own conveyancers for contracts and settlement.</p><div class="row"><button class="btn" onclick="enquire(\''+id+'\')">Contact owner</button><button class="btn alt" onclick="requestInspection(\''+id+'\')">Request inspection</button><button class="btn alt" onclick="submitOffer(\''+id+'\')">Make an offer</button></div><p class="small muted">Browsing is free. Sign-in is required to contact owners or submit requests.</p></div>';
- }catch(error){$('modalBody').textContent='Unable to load property: '+error.message}
+  modalBody.innerHTML='<div class="property-detail">'+(photos.length?'<div class="property-gallery">'+photos.map((photo,i)=>'<img loading="lazy" alt="Property photo '+(i+1)+'" src="'+escapeHTML(photo.url)+'">').join('')+'</div>':'<div class="property-no-photo">Property photographs coming soon</div>')+'<p class="muted">'+escapeHTML([p.suburb,p.state].filter(Boolean).join(', '))+'</p><h2>'+money(p.price)+'</h2><p>'+escapeHTML(p.property_type||'Property')+' · '+escapeHTML(p.beds||0)+' bedrooms · '+escapeHTML(p.baths||0)+' bathrooms</p><p class="muted">Advertised directly by the owner. HomeSquare is not a real estate agency. Buyers and sellers use their own conveyancers for contracts and settlement.</p><div class="row"><button class="btn" onclick="enquire(\''+id+'\')">Contact owner</button><button class="btn alt" onclick="requestInspection(\''+id+'\')">Request inspection</button><button class="btn alt" onclick="submitOffer(\''+id+'\')">Make an offer</button></div><p class="small muted">Browsing is free. Sign-in is required to contact owners or submit requests.</p></div>';
+ }catch(error){modalBody.textContent='Unable to load property: '+error.message}
 }
 async function enquire(id){
  if(!window.homesquareBackendReady){alert('Marketplace connection unavailable');return}
@@ -214,20 +229,22 @@ async function enquire(id){
 }
 async function submitEnquiry(e,id){e.preventDefault();if(window.homesquareBackendReady){let f=new FormData(e.target);try{await window.homesquareSendEnquiry(id,f.get('kind')==='Inspection request'?'inspection':f.get('kind')==='Expression of interest / offer'?'offer':'general',String(f.get('message')),f.get('amount')?Number(f.get('amount')):null);closeModal();alert('Your enquiry has been sent.')}catch(error){alert('Unable to send enquiry: '+error.message)}return}alert('Marketplace connection unavailable. Please try again later.')}async function viewEnquiries(id){
  if(!window.homesquareBackendReady){alert('Sign in to view enquiries');return}
- $('overlay').classList.remove('hidden');$('modalTitle').textContent='Property enquiries';$('modalBody').textContent='Loading…';
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Property enquiries';
+ const modalBody=resetModalBody();modalBody.textContent='Loading…';
  try{const entries=await window.homesquareLoadEnquiries(id);
- $('modalBody').innerHTML=entries.length?entries.map(e=>'<div class="dashboard"><strong>'+escapeHTML(e.kind)+'</strong> · '+new Date(e.created_at).toLocaleDateString('en-AU')+'<p>'+escapeHTML(e.message)+'</p>'+(e.proposed_amount!==null?'<p>Indicative amount: '+money(e.proposed_amount)+'</p>':'')+'</div>').join(''):'<p>No enquiries yet.</p>';
- }catch(e){$('modalBody').textContent='Unable to load enquiries: '+e.message}
+ modalBody.innerHTML=entries.length?entries.map(e=>'<div class="dashboard"><strong>'+escapeHTML(e.kind)+'</strong> · '+new Date(e.created_at).toLocaleDateString('en-AU')+'<p>'+escapeHTML(e.message)+'</p>'+(e.proposed_amount!==null?'<p>Indicative amount: '+money(e.proposed_amount)+'</p>':'')+'</div>').join(''):'<p>No enquiries yet.</p>';
+ }catch(e){modalBody.textContent='Unable to load enquiries: '+e.message}
 }
 async function viewActivity(id){
- $('overlay').classList.remove('hidden');$('modalTitle').textContent='Inspections & offers';$('modalBody').textContent='Loading requests…';
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Inspections & offers';
+ const modalBody=resetModalBody();modalBody.textContent='Loading requests…';
  try{
  const [inspections,offers]=await Promise.all([window.homesquareLoadInspections(id),window.homesquareLoadOffers(id)]);
  const pendingInspections=inspections.filter(x=>x.status==='requested').length,pendingOffers=offers.filter(x=>x.status==='submitted').length;
  const buttons=(type,record)=>((type==='inspection'&&record.status==='requested')||(type==='offer'&&record.status==='submitted'))?'<div class="row"><button class="btn" onclick="decideActivity(\''+type+'\',\''+record.id+'\',\'accepted\',\''+id+'\')">'+(type==='inspection'?'Confirm inspection':'Accept indicative offer')+'</button><button class="btn alt" onclick="decideActivity(\''+type+'\',\''+record.id+'\',\'declined\',\''+id+'\')">Decline</button></div>':'';
  const render=(type,record)=>'<article class="seller-request"><div class="buyer-activity-head"><strong>'+(type==='inspection'?escapeHTML(new Date(record.requested_at).toLocaleString('en-AU')):money(record.amount))+'</strong><span class="seller-status">'+escapeHTML(record.status||'Unknown')+'</span></div>'+(record.message?'<p>'+escapeHTML(record.message)+'</p>':'<p class="muted">No additional message</p>')+buttons(type,record)+'</article>';
- $('modalBody').innerHTML='<div class="seller-summary"><div class="seller-stat"><strong>'+pendingInspections+'</strong><span>Inspections awaiting response</span></div><div class="seller-stat"><strong>'+pendingOffers+'</strong><span>Offers awaiting response</span></div><div class="seller-stat"><strong>'+(inspections.length+offers.length)+'</strong><span>Total requests</span></div></div><h3>Inspection requests</h3>'+(inspections.length?inspections.map(x=>render('inspection',x)).join(''):'<p class="muted">No inspection requests yet.</p>')+'<h3>Indicative offers</h3><p class="small muted">Accepting an indicative offer here does not create a binding property sale contract. Use your own conveyancer for legal documentation.</p>'+(offers.length?offers.map(x=>render('offer',x)).join(''):'<p class="muted">No offers yet.</p>');
- }catch(e){$('modalBody').textContent='Unable to load requests: '+e.message}
+ modalBody.innerHTML='<div class="seller-summary"><div class="seller-stat"><strong>'+pendingInspections+'</strong><span>Inspections awaiting response</span></div><div class="seller-stat"><strong>'+pendingOffers+'</strong><span>Offers awaiting response</span></div><div class="seller-stat"><strong>'+(inspections.length+offers.length)+'</strong><span>Total requests</span></div></div><h3>Inspection requests</h3>'+(inspections.length?inspections.map(x=>render('inspection',x)).join(''):'<p class="muted">No inspection requests yet.</p>')+'<h3>Indicative offers</h3><p class="small muted">Accepting an indicative offer here does not create a binding property sale contract. Use your own conveyancer for legal documentation.</p>'+(offers.length?offers.map(x=>render('offer',x)).join(''):'<p class="muted">No offers yet.</p>');
+ }catch(e){modalBody.textContent='Unable to load requests: '+e.message}
 }
 async function decideActivity(type,id,decision,propertyId){
  const verb=decision==='accepted'?'accept':'decline';
@@ -239,20 +256,22 @@ async function decideActivity(type,id,decision,propertyId){
  }catch(e){alert('Unable to update: '+e.message)}
 }
 async function viewConversations(id){
- $('overlay').classList.remove('hidden');$('modalTitle').textContent='Buyer conversations';$('modalBody').textContent='Loading…';
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Buyer conversations';
+ const modalBody=resetModalBody();modalBody.textContent='Loading…';
  try{
  const [enquiries,inspections,offers,messages]=await Promise.all([window.homesquareLoadEnquiries(id),window.homesquareLoadInspections(id),window.homesquareLoadOffers(id),window.homesquareLoadPropertyMessages(id)]);
  const buyerIds=[...new Set([...enquiries,...inspections,...offers,...messages].map(x=>x.buyer_id).filter(Boolean))];
- $('modalBody').innerHTML=buyerIds.length?buyerIds.map(buyerId=>'<div class="dashboard"><p>Buyer reference: '+escapeHTML(buyerId.slice(0,8))+'</p><button class="btn alt" onclick="openConversation(\''+id+'\',\''+buyerId+'\')">Open conversation</button></div>').join(''):'<p>No buyer conversations yet.</p>';
- }catch(e){$('modalBody').textContent=e.message}
+ modalBody.innerHTML=buyerIds.length?buyerIds.map(buyerId=>'<div class="dashboard"><p>Buyer reference: '+escapeHTML(buyerId.slice(0,8))+'</p><button class="btn alt" onclick="openConversation(\''+id+'\',\''+buyerId+'\')">Open conversation</button></div>').join(''):'<p>No buyer conversations yet.</p>';
+ }catch(e){modalBody.textContent=e.message}
 }
 async function openConversation(id,buyerId){
- $('overlay').classList.remove('hidden');$('modalTitle').textContent='Property conversation';$('modalBody').textContent='Loading…';
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Property conversation';
+ const modalBody=resetModalBody();modalBody.textContent='Loading…';
  try{
  const messages=await window.homesquareGetMessages(id,buyerId);
  const current=await window.homesquareDb.auth.getUser(),userId=current.data.user?.id;
- $('modalBody').innerHTML='<div class="conversation-thread" aria-label="Conversation history">'+(messages.length?messages.map(m=>'<div class="conversation-bubble '+(m.sender_id===userId?'mine':'theirs')+'"><p>'+escapeHTML(m.body)+'</p><span>'+escapeHTML(new Date(m.created_at).toLocaleString('en-AU'))+'</span></div>').join(''):'<p class="muted">No messages yet. Start the conversation below.</p>')+'</div><form onsubmit="replyConversation(event,\''+id+'\',\''+buyerId+'\')"><div class="field"><label>Message</label><textarea name="body" maxlength="5000" minlength="2" rows="3" required placeholder="Write a message…"></textarea></div><button class="btn" type="submit">Send message</button></form>';
- }catch(e){$('modalBody').textContent='Unable to open conversation: '+e.message}
+ modalBody.innerHTML='<div class="conversation-thread" aria-label="Conversation history">'+(messages.length?messages.map(m=>'<div class="conversation-bubble '+(m.sender_id===userId?'mine':'theirs')+'"><p>'+escapeHTML(m.body)+'</p><span>'+escapeHTML(new Date(m.created_at).toLocaleString('en-AU'))+'</span></div>').join(''):'<p class="muted">No messages yet. Start the conversation below.</p>')+'</div><form onsubmit="replyConversation(event,\''+id+'\',\''+buyerId+'\')"><div class="field"><label>Message</label><textarea name="body" maxlength="5000" minlength="2" rows="3" required placeholder="Write a message…"></textarea></div><button class="btn" type="submit">Send message</button></form>';
+ }catch(e){modalBody.textContent='Unable to open conversation: '+e.message}
 }
 async function replyConversation(e,id,buyerId){
  e.preventDefault();const button=e.target.querySelector('button[type=submit]'),body=String(new FormData(e.target).get('body')||'').trim();if(body.length<2)return;button.disabled=true;button.textContent='Sending…';
@@ -308,51 +327,92 @@ async function viewEvidence(id){
  try{const url=await window.homesquareGetOwnershipEvidence(id);window.open(url,'_blank','noopener,noreferrer')}catch(e){alert(e.message)}
 }
 async function showPhotos(id){
- $('overlay').classList.remove('hidden');$('modalTitle').textContent='Manage property photos';$('modalBody').textContent='Loading…';
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Manage property photos';
+ const modalBody=resetModalBody();modalBody.textContent='Loading…';
  try{const photos=await window.homesquareLoadPhotos(id);const listing=sellerListingsCache.find(l=>l.id===id);const canEdit=listing?.status==='draft';
- $('modalBody').innerHTML='<p class="muted">'+photos.length+' photo'+(photos.length===1?'':'s')+' uploaded. '+(canEdit?'You can add or remove photos while this listing is a draft.':'Photo changes are available while the listing is a draft.')+'</p>'+(canEdit?'<button class="btn" onclick="uploadPhoto(\''+id+'\')">+ Add photos</button>':'')+(photos.length?'<div class="seller-photo-grid" style="margin-top:18px">'+photos.map(p=>'<figure><img loading="lazy" alt="Property photo" src="'+escapeHTML(p.url)+'">'+(canEdit?'<button class="btn alt" onclick="deletePhoto(\''+id+'\',\''+p.id+'\',\''+escapeHTML(p.storage_path)+'\')">Remove</button>':'')+'</figure>').join('')+'</div>':'<p class="muted" style="margin-top:20px">No photos yet. Add high-quality photos to help buyers understand your home.</p>');
- }catch(e){$('modalBody').textContent='Unable to load photos: '+e.message}
+ modalBody.innerHTML='<p class="muted">'+photos.length+' photo'+(photos.length===1?'':'s')+' uploaded. '+(canEdit?'You can add or remove photos while this listing is a draft.':'Photo changes are available while the listing is a draft.')+'</p>'+(canEdit?'<button class="btn" onclick="uploadPhoto(\''+id+'\')">+ Add photos</button>':'')+(photos.length?'<div class="seller-photo-grid" style="margin-top:18px">'+photos.map(p=>'<figure><img loading="lazy" alt="Property photo" src="'+escapeHTML(p.url)+'">'+(canEdit?'<button class="btn alt" onclick="deletePhoto(\''+id+'\',\''+p.id+'\',\''+escapeHTML(p.storage_path)+'\')">Remove</button>':'')+'</figure>').join('')+'</div>':'<p class="muted" style="margin-top:20px">No photos yet. Add high-quality photos to help buyers understand your home.</p>');
+ }catch(e){modalBody.textContent='Unable to load photos: '+e.message}
 }
 async function deletePhoto(propertyId,id,path){
  if(!confirm('Remove this photo?'))return;
  try{await window.homesquareDeletePhoto({id,property_id:propertyId});await showPhotos(propertyId)}catch(e){alert(e.message)}
 }
 async function showStaff(){
- pages('staffPage');$('staffQueue').textContent='Checking staff access…';
+ pages('staffPage');
+ const revision=accountRevision;
+ if(!accountUserId){$('staffQueue').textContent='Sign in with a staff account to view the queue.';return}
+ $('staffQueue').textContent='Checking staff access…';
  try{
- if(!await window.homesquareIsStaff()){ $('staffQueue').textContent='Staff access required.';return}
+ const isStaff=await window.homesquareIsStaff();
+ if(revision!==accountRevision)return;
+ if(!isStaff){$('staffQueue').textContent='Staff access required.';return}
  const {properties,checks}=await window.homesquareStaffQueue();
- $('staffQueue').innerHTML='<h3>Ownership declarations</h3>'+(checks.map(c=>'<div class="dashboard"><p>Property: '+escapeHTML(c.property_id)+'</p><p>'+escapeHTML(c.declaration)+'</p><button class="btn alt" onclick="staffOwnership(\''+c.property_id+'\',true)">Verify</button> <button class="btn alt" onclick="staffOwnership(\''+c.property_id+'\',false)">Reject</button></div>').join('')||'<p>No pending checks.</p>')+'<h3>Listings awaiting review</h3>'+(properties.map(p=>'<div class="dashboard"><p>'+escapeHTML(p.address)+', '+escapeHTML(p.suburb)+'</p><button class="btn alt" onclick="staffListing(\''+p.id+'\',true)">Publish</button> <button class="btn alt" onclick="staffListing(\''+p.id+'\',false)">Reject</button></div>').join('')||'<p>No pending listings.</p>');
- }catch(e){$('staffQueue').textContent='Unable to load staff queue: '+e.message}
+ if(revision!==accountRevision)return;
+ $('staffQueue').innerHTML='<h3>Ownership declarations</h3>'+(checks.map(c=>'<div class="dashboard"><p>Property: '+escapeHTML(c.property_id)+'</p><p>'+escapeHTML(c.declaration)+'</p>'+(c.evidence_path?'<button class="btn alt" onclick="viewEvidence(\''+c.property_id+'\')">View evidence</button> <button class="btn alt" onclick="staffOwnership(\''+c.property_id+'\',true)">Verify</button>':'<p class="muted">No supporting evidence uploaded.</p>')+' <button class="btn alt" onclick="staffOwnership(\''+c.property_id+'\',false)">Reject</button></div>').join('')||'<p>No pending checks.</p>')+'<h3>Listings awaiting review</h3>'+(properties.map(p=>'<div class="dashboard"><p>'+escapeHTML(p.address)+', '+escapeHTML(p.suburb)+'</p><button class="btn alt" onclick="staffListing(\''+p.id+'\',true)">Publish</button> <button class="btn alt" onclick="staffListing(\''+p.id+'\',false)">Reject</button></div>').join('')||'<p>No pending listings.</p>');
+ }catch(e){if(revision===accountRevision)$('staffQueue').textContent='Unable to load staff queue: '+e.message}
 }
 async function staffOwnership(id,approve){if(approve&&!confirm('Have you independently checked the supporting evidence and seller authority?'))return;if(!confirm((approve?'Verify':'Reject')+' ownership declaration?'))return;try{await window.homesquareReviewOwnership(id,approve);await showStaff()}catch(e){alert(e.message)}}
 async function staffListing(id,approve){const reason=approve?'':prompt('Reason for rejecting this listing')||'';if(!confirm((approve?'Publish':'Reject')+' this listing?'))return;try{await window.homesquareReviewListing(id,approve,reason);await showStaff()}catch(e){alert(e.message)}}
 let buyerActivityFilter='all';let buyerActivityCache=[];
+let accountUserId=null, accountRevision=0;
+window.homesquareAccountChanged=function(userId){
+ if(userId===accountUserId)return;
+ const previousUserId=accountUserId;
+ accountUserId=userId;
+ accountRevision++;
+ sellerListingsCache=[];
+ buyerActivityCache=[];
+ buyerActivityFilter='all';
+ $('dashboard').textContent='';
+ $('buyerActivity').textContent='';
+ $('staffQueue').textContent='';
+ if(previousUserId){
+  listingAwaitingSignIn=false;
+  listingStep=0;
+  listingPhotoFiles=[];
+  for(const key of Object.keys(listingDraft))delete listingDraft[key];
+  closeModal();
+ }
+ const revision=accountRevision;
+ // Defer database reads until the authentication callback has returned.
+ setTimeout(()=>{
+  if(revision!==accountRevision)return;
+  if(!$('dashboardPage').classList.contains('hidden'))renderDashboard();
+  else if(!$('buyerPage').classList.contains('hidden'))showBuyerDashboard();
+  else if(!$('staffPage').classList.contains('hidden'))showStaff();
+ },0);
+};
 function renderBuyerActivity(){
  const items=buyerActivityFilter==='all'?buyerActivityCache:buyerActivityCache.filter(x=>x.category.toLowerCase()===buyerActivityFilter);
  const totals={all:buyerActivityCache.length,enquiry:0,offer:0,inspection:0,message:0};
  buyerActivityCache.forEach(x=>totals[x.category.toLowerCase()]++);
- const tabs=['all','enquiry','offer','inspection','message'];
- $('buyerActivity').innerHTML='<div class="buyer-overview"><h3>Your property activity</h3><p class="muted">Keep track of conversations, inspections and offers in one place.</p><div class="buyer-filters" role="group" aria-label="Filter buyer activity">'+tabs.map(t=>'<button type="button" class="btn '+(buyerActivityFilter===t?'':'alt')+'" onclick="buyerActivityFilter=\''+t+'\';renderBuyerActivity()">'+(t==='all'?'All':t.charAt(0).toUpperCase()+t.slice(1)+'s')+' ('+totals[t]+')</button>').join('')+'</div></div>'+(items.length?items.map(x=>'<article class="buyer-activity-card"><div class="buyer-activity-head"><strong>'+escapeHTML(x.category)+'</strong>'+(x.status?'<span class="seller-status">'+escapeHTML(String(x.status).replaceAll('_',' '))+'</span>':'')+'</div><p>'+escapeHTML(x.summary)+'</p><span class="muted small">'+escapeHTML(new Date(x.created_at).toLocaleString('en-AU'))+'</span><div class="row"><button class="btn alt" onclick="openMyConversation(\''+x.property_id+'\')">Conversation</button><button class="btn alt" onclick="viewProperty(\''+x.property_id+'\')">View property</button></div></article>').join(''):'<div class="empty"><h3>Nothing here yet</h3><p>'+(buyerActivityFilter==='all'?'Browse homes to get started.':'No '+buyerActivityFilter+' activity to show.')+'</p><a class="btn" href="find-homes.html">Find homes</a></div>');
+ const tabs={all:'All',enquiry:'Enquiries',offer:'Offers',inspection:'Inspections',message:'Messages'};
+ $('buyerActivity').innerHTML='<div class="buyer-overview"><h3>Your property activity</h3><p class="muted">Keep track of conversations, inspections and offers in one place.</p><div class="buyer-filters" role="group" aria-label="Filter buyer activity">'+Object.entries(tabs).map(([t,label])=>'<button type="button" class="btn '+(buyerActivityFilter===t?'':'alt')+'" onclick="buyerActivityFilter=\''+t+'\';renderBuyerActivity()">'+label+' ('+totals[t]+')</button>').join('')+'</div></div>'+(items.length?items.map(x=>'<article class="buyer-activity-card"><div class="buyer-activity-head"><strong>'+escapeHTML(x.category)+'</strong>'+(x.status?'<span class="seller-status">'+escapeHTML(String(x.status).replaceAll('_',' '))+'</span>':'')+'</div><p>'+escapeHTML(x.summary)+'</p><span class="muted small">'+escapeHTML(new Date(x.created_at).toLocaleString('en-AU'))+'</span><div class="row"><button class="btn alt" onclick="openMyConversation(\''+x.property_id+'\')">Conversation</button><button class="btn alt" onclick="viewProperty(\''+x.property_id+'\')">View property</button></div></article>').join(''):'<div class="empty"><h3>Nothing here yet</h3><p>'+(buyerActivityFilter==='all'?'Browse homes to get started.':'No '+buyerActivityFilter+' activity to show.')+'</p><a class="btn" href="find-homes.html">Find homes</a></div>');
 }
 async function showBuyerDashboard(){
- pages('buyerPage');$('buyerActivity').textContent='Loading your activity…';
+ pages('buyerPage');
+ const revision=accountRevision;
+ if(!accountUserId){$('buyerActivity').textContent='Sign in to view your buyer activity.';return}
+ $('buyerActivity').textContent='Loading your activity…';
  try{
  const data=await window.homesquareLoadBuyerActivity();
+ if(revision!==accountRevision)return;
  buyerActivityCache=[...data.enquiries.map(x=>({...x,category:'Enquiry',summary:x.message})),...data.offers.map(x=>({...x,category:'Offer',summary:money(x.amount)+(x.message?' · '+x.message:'')})),...data.inspections.map(x=>({...x,category:'Inspection',summary:new Date(x.requested_at).toLocaleString('en-AU')+(x.message?' · '+x.message:'')})),...data.messages.map(x=>({...x,category:'Message',summary:x.body}))].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
  renderBuyerActivity();
- }catch(e){$('buyerActivity').textContent='Unable to load buyer activity: '+e.message}
+ }catch(e){if(revision===accountRevision)$('buyerActivity').textContent='Unable to load buyer activity: '+e.message}
 }
 async function openMyConversation(id){
  try{const {data:{user}}=await window.homesquareDb.auth.getUser();if(!user)throw new Error('Sign in first');await openConversation(id,user.id)}catch(e){alert(e.message)}
 }
 async function showServiceBookings(){
- $('overlay').classList.remove('hidden');$('modalTitle').textContent='Your service requests';$('modalBody').textContent='Loading…';
- try{const bookings=await window.homesquareLoadServices();$('modalBody').innerHTML=bookings.length?bookings.map(b=>'<div class="dashboard"><strong>'+escapeHTML(b.service)+'</strong><p>Status: '+escapeHTML(b.status)+'</p><p>'+escapeHTML(b.details)+'</p>'+(b.scheduled_at?'<p>Scheduled: '+escapeHTML(new Date(b.scheduled_at).toLocaleString('en-AU'))+'</p>':'')+'</div>').join(''):'<p>No requests yet.</p>'}catch(e){$('modalBody').textContent=e.message}
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Your service requests';
+ const modalBody=resetModalBody();modalBody.textContent='Loading…';
+ try{const bookings=await window.homesquareLoadServices();modalBody.innerHTML=bookings.length?bookings.map(b=>'<div class="dashboard"><strong>'+escapeHTML(b.service)+'</strong><p>Status: '+escapeHTML(b.status)+'</p><p>'+escapeHTML(b.details)+'</p>'+(b.scheduled_at?'<p>Scheduled: '+escapeHTML(new Date(b.scheduled_at).toLocaleString('en-AU'))+'</p>':'')+'</div>').join(''):'<p>No requests yet.</p>'}catch(e){modalBody.textContent=e.message}
 }
 async function staffServices(){
- $('overlay').classList.remove('hidden');$('modalTitle').textContent='Service bookings';$('modalBody').textContent='Loading…';
- try{if(!await window.homesquareIsStaff())throw new Error('Staff access required');const bookings=await window.homesquareStaffServices();$('modalBody').innerHTML=bookings.length?bookings.map(b=>'<div class="dashboard"><strong>'+escapeHTML(b.service)+'</strong><p>'+escapeHTML(b.details)+'</p><p>Status: '+escapeHTML(b.status)+'</p><button class="btn alt" onclick="staffScheduleService(\''+b.id+'\')">Manage booking</button></div>').join(''):'<p>No bookings yet.</p>'}catch(e){$('modalBody').textContent=e.message}
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Service bookings';
+ const modalBody=resetModalBody();modalBody.textContent='Loading…';
+ try{if(!await window.homesquareIsStaff())throw new Error('Staff access required');const bookings=await window.homesquareStaffServices();modalBody.innerHTML=bookings.length?bookings.map(b=>'<div class="dashboard"><strong>'+escapeHTML(b.service)+'</strong><p>'+escapeHTML(b.details)+'</p><p>Status: '+escapeHTML(b.status)+'</p><button class="btn alt" onclick="staffScheduleService(\''+b.id+'\')">Manage booking</button></div>').join(''):'<p>No bookings yet.</p>'}catch(e){modalBody.textContent=e.message}
 }
 async function staffScheduleService(id){
  const status=prompt('Status: contacted, scheduled, completed or cancelled');if(!status)return;
@@ -360,8 +420,8 @@ async function staffScheduleService(id){
  const notes=prompt('Staff notes (optional)')||'';
  try{await window.homesquareStaffUpdateService(id,status,date,notes);await staffServices()}catch(e){alert(e.message)}
 }
-renderFeatured();
-</script><section class="wrap section" id="account"><div class="dashboard"><h2>HomeSquare account</h2><p id="accountStatus">Backend not configured yet</p><form id="authForm" onsubmit="homesquareSignIn(event)"><div class="field"><label>Email</label><input type="email" name="email" required autocomplete="email"></div><div class="field"><label>Password</label><input type="password" name="password" minlength="6" required autocomplete="current-password"></div><div class="field"><label>Action</label><select name="action"><option value="signin">Sign in</option><option value="signup">Create account</option></select></div><button class="btn">Continue</button></form><button id="signOut" class="btn alt" onclick="homesquareSignOut()" hidden>Sign out</button><p id="accountMessage" role="status"></p><p class="muted small">Use your account to manage listings and enquiries. Listings are reviewed before publication.</p></div></section><script src="supabase/config.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script src="supabase/client.js"></script><script id="homesquare-entry-routing">
+window.addEventListener('load',renderFeatured);
+</script><section class="wrap section" id="account"><div class="dashboard"><h2>HomeSquare account</h2><p id="accountStatus">Backend not configured yet</p><form id="authForm" onsubmit="homesquareSignIn(event)"><div class="field"><label>Email</label><input type="email" name="email" required autocomplete="email"></div><div class="field"><label>Password</label><input type="password" name="password" minlength="6" required autocomplete="current-password"></div><div class="field"><label>Action</label><select name="action"><option value="signin">Sign in</option><option value="signup">Create account</option></select></div><button class="btn" type="submit">Continue</button></form><button id="signOut" class="btn alt" onclick="homesquareSignOut()" hidden>Sign out</button><p id="accountMessage" role="status"></p><p class="muted small">Use your account to manage listings and enquiries. Listings are reviewed before publication.</p></div></section><script src="supabase/config.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script src="supabase/client.js"></script><script id="homesquare-entry-routing">
 /* Route landing-page actions to real Supabase-backed views. */
 window.addEventListener('load',()=>{
 const p=new URLSearchParams(location.search),view=p.get('view'),q=p.get('q');

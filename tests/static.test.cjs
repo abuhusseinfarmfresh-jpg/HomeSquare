@@ -1,12 +1,15 @@
 const fs=require('node:fs');
 const vm=require('node:vm');
 const assert=require('node:assert/strict');
-const html=fs.readFileSync('index.html','utf8');
+const html=fs.readFileSync('marketplace.html','utf8');
 const client=fs.readFileSync('supabase/client.js','utf8');
 const sql=fs.readFileSync('supabase/migrations/20261115000000_initial_schema.sql','utf8');
-const inline=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(x=>x[1]).filter(Boolean);
-assert.equal(inline.length,1,'Expected exactly one inline application script');
-new vm.Script(inline[0],{filename:'index.html'});
+const scripts=source=>[...source.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(x=>x[1]).filter(Boolean);
+for(const file of ['index.html','marketplace.html','find-homes.html']){
+ for(const [index,script] of scripts(fs.readFileSync(file,'utf8')).entries()){
+  new vm.Script(script,{filename:file+' inline script '+(index+1)});
+ }
+}
 new vm.Script(client,{filename:'supabase/client.js'});
 for(const method of ['homesquareLoadProperties','homesquareCreateDraft','homesquareSendEnquiry','homesquareLoadMyProperties','homesquareLoadEnquiries','homesquareSubmitForReview','homesquareDeleteDraft'])assert.ok(client.includes(method),method);
 for(const table of ['profiles','properties','enquiries'])assert.ok(sql.includes('alter table public.'+table+' enable row level security'),table+' RLS');
@@ -48,3 +51,45 @@ assert.ok(feed.includes('security_invoker=true'),'Activity view must enforce tab
 for(const fn of ['homesquareLoadBuyerActivity','homesquareStaffServices','homesquareStaffUpdateService'])assert.ok(client.includes(fn),'Missing '+fn);
 for(const fn of ['showBuyerDashboard()','staffServices()','showServiceBookings()','hydratePropertyPhotos('])assert.ok(html.includes(fn),'Missing '+fn);
 console.log('PASS: JS parses, server integrations present, RLS declared, unsafe publish removed');
+
+const test=require('node:test');
+
+test('account switches clear private data and ignore late seller responses',async()=>{
+ const elements=new Map();
+ const pendingRefreshes=[];
+ const window={homesquareBackendReady:true,addEventListener(){}};
+ const document={getElementById(id){
+  if(!elements.has(id))elements.set(id,{textContent:'',innerHTML:'',
+   classList:{add(){},remove(){},contains(){return id!=='dashboardPage'}},
+   cloneNode(){return {innerHTML:'',textContent:'',isConnected:true}},
+   replaceWith(next){this.isConnected=false;elements.set(id,next)},
+  });
+  return elements.get(id);
+ },body:{style:{}}};
+ const context=vm.createContext({window,document,setTimeout:callback=>pendingRefreshes.push(callback)});
+ new vm.Script(scripts(html)[0]).runInContext(context);
+ window.homesquareAccountChanged('seller');
+
+ let resolveListings;
+ window.homesquareLoadMyProperties=()=>new Promise(resolve=>{resolveListings=resolve});
+ const oldRequest=vm.runInContext('renderDashboard()',context);
+ const dashboard=document.getElementById('dashboard');
+ const gallery=document.getElementById('modalBody');
+ gallery.innerHTML='Private gallery';
+ vm.runInContext("sellerListingsCache=[{id:'seller-only'}];buyerActivityCache=[{id:'previous-activity'}]",context);
+
+ window.homesquareAccountChanged(null);
+ window.homesquareAccountChanged('buyer');
+ assert.equal(dashboard.textContent,'');
+ assert.equal(document.getElementById('modalBody').innerHTML,'');
+ assert.equal(vm.runInContext('sellerListingsCache.length+buyerActivityCache.length',context),0);
+
+ resolveListings([{status:'draft',address:'Seller-only address'}]);
+ await oldRequest;
+ assert.equal(dashboard.innerHTML,'');
+
+ window.homesquareLoadMyProperties=async()=>[];
+ pendingRefreshes.forEach(refresh=>refresh());
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.match(dashboard.innerHTML,/No properties listed yet/);
+});

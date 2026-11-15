@@ -8,8 +8,8 @@ window.homesquareBackendReady=true;
 window.homesquareDb=client;
 const el=id=>document.getElementById(id);
 function notify(message){const target=el('accountMessage');if(target)target.textContent=message}
-async function refresh(){
-const {data:{user}}=await client.auth.getUser();
+function updateAccount(user){
+window.homesquareAccountChanged?.(user?.id ?? null);
 if(el('accountStatus'))el('accountStatus').textContent=user?'Signed in: '+user.email:'Not signed in';
 if(el('signOut'))el('signOut').hidden=!user;
 if(el('authForm'))el('authForm').hidden=!!user;
@@ -23,14 +23,15 @@ window.homesquareSignIn=async function(e){
  if(result.error)throw result.error;
  const active=!!result.data?.session;
  notify(action==='signup'&&!active?'Account created. Check your email to confirm your address before signing in.':'Signed in successfully.');
- await refresh();
+ if(active)form.reset();
  if(active&&typeof window.resumeListingAfterSignIn==='function')window.resumeListingAfterSignIn();
  }catch(error){notify('Unable to continue: '+error.message)}
  finally{if(button){button.disabled=false;button.textContent='Continue'}}
 };
 window.homesquareSignOut=async function(){
  const {error}=await client.auth.signOut();if(error){notify('Unable to sign out: '+error.message);return}
- notify('Signed out.');await refresh();
+ el('authForm')?.reset();
+ notify('Signed out.');
 };
 window.homesquareLoadProperties=async function(){
 const {data,error}=await client.from('properties').select('id,address,suburb,state,property_type,price,beds,baths,status').eq('status','published').order('created_at',{ascending:false}).limit(100);
@@ -173,6 +174,5 @@ window.homesquareDeletePhoto=async function(photo){
  const result=await client.storage.from('property-photos').remove([record.storage_path]);
  if(result.error)throw new Error('Photo record deleted, but storage cleanup failed: '+result.error.message);
 };
-client.auth.onAuthStateChange(()=>{refresh().catch(console.error)});
-refresh().catch(console.error);
+client.auth.onAuthStateChange((_event, session)=>updateAccount(session?.user));
 })();

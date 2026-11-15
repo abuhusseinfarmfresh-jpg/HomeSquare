@@ -87,6 +87,24 @@ window.homesquareStaffQueue=async function(){const [properties,checks]=await Pro
  client.from('ownership_checks').select('property_id,owner_id,status,declaration').eq('status','pending')
 ]);if(properties.error)throw properties.error;if(checks.error)throw checks.error;return {properties:properties.data,checks:checks.data}};
 window.homesquareSubmitOwnership=async function(propertyId,declaration){const user=await currentUser();return insertRow('ownership_checks',{property_id:propertyId,owner_id:user.id,declaration})};
+window.homesquareUploadOwnershipEvidence=async function(propertyId,file){
+ await currentUser();
+ if(!['application/pdf','image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10485760)throw new Error('Upload PDF, JPG, PNG or WebP under 10 MB');
+ const extension=({'application/pdf':'pdf','image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type];
+ const path=propertyId+'/'+crypto.randomUUID()+'.'+extension;
+ const upload=await client.storage.from('ownership-evidence').upload(path,file,{contentType:file.type,upsert:false});
+ if(upload.error)throw upload.error;
+ const update=await client.from('ownership_checks').update({evidence_path:path}).eq('property_id',propertyId).eq('status','pending').select('property_id');
+ if(update.error||!update.data?.length){await client.storage.from('ownership-evidence').remove([path]);throw update.error||new Error('Submit your ownership declaration before uploading evidence')}
+ return path;
+};
+window.homesquareGetOwnershipEvidence=async function(propertyId){
+ await currentUser();
+ const {data:check,error}=await client.from('ownership_checks').select('evidence_path').eq('property_id',propertyId).single();
+ if(error)throw error;if(!check.evidence_path)throw new Error('No evidence uploaded');
+ const {data,error:signError}=await client.storage.from('ownership-evidence').createSignedUrl(check.evidence_path,300);
+ if(signError)throw signError;return data.signedUrl;
+};
 window.homesquareReviewOwnership=async function(propertyId,approve){const {error}=await client.rpc('staff_review_ownership',{p_property:propertyId,p_approve:approve});if(error)throw error};
 window.homesquareReviewListing=async function(propertyId,approve,reason=''){const {error}=await client.rpc('staff_review_listing',{p_property:propertyId,p_approve:approve,p_reason:reason});if(error)throw error};
 window.homesquareDeletePhoto=async function(photo){await currentUser();const {error}=await client.from('property_photos').delete().eq('id',photo.id);if(error)throw error;const result=await client.storage.from('property-photos').remove([photo.storage_path]);if(result.error)throw result.error};

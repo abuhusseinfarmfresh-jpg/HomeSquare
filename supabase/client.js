@@ -79,7 +79,10 @@ window.homesquareUploadPhoto=async function(propertyId,file){
  try{return await insertRow('property_photos',{property_id:propertyId,storage_path:path})}
  catch(e){await client.storage.from('property-photos').remove([path]);throw e}
 };
-window.homesquareRequestService=async function(propertyId,service,details=''){const user=await currentUser();return insertRow('service_requests',{owner_id:user.id,property_id:propertyId||null,service,details})};
+window.homesquareRequestService=async function(propertyId,service,details='',preferredAt=null,phone=''){const user=await currentUser();return insertRow('service_requests',{owner_id:user.id,property_id:propertyId||null,service,details,preferred_at:preferredAt?new Date(preferredAt).toISOString():null,contact_phone:phone})};
+window.homesquareStaffServices=async function(){const {data,error}=await client.from('service_requests').select('*').order('created_at',{ascending:false});if(error)throw error;return data};
+window.homesquareStaffUpdateService=async function(id,status,scheduledAt=null,notes=''){const {error}=await client.rpc('staff_update_service',{p_id:id,p_status:status,p_scheduled_at:scheduledAt?new Date(scheduledAt).toISOString():null,p_notes:notes});if(error)throw error};
+window.homesquareLoadBuyerActivity=async function(){const user=await currentUser();const tables=['enquiries','offers','inspections','messages'];const results=await Promise.all(tables.map(t=>client.from(t).select('*').eq('buyer_id',user.id).order('created_at',{ascending:false}).limit(100)));results.forEach(x=>{if(x.error)throw x.error});return Object.fromEntries(tables.map((t,i)=>[t,results[i].data]))};
 window.homesquareLoadServices=async function(){const user=await currentUser();const {data,error}=await client.from('service_requests').select('*').eq('owner_id',user.id).order('created_at',{ascending:false});if(error)throw error;return data};
 window.homesquareIsStaff=async function(){const user=await currentUser();const {data,error}=await client.from('staff_members').select('user_id').eq('user_id',user.id).maybeSingle();if(error)throw error;return !!data};
 window.homesquareStaffQueue=async function(){const [properties,checks]=await Promise.all([
@@ -107,7 +110,7 @@ window.homesquareGetOwnershipEvidence=async function(propertyId){
 };
 window.homesquareReviewOwnership=async function(propertyId,approve){const {error}=await client.rpc('staff_review_ownership',{p_property:propertyId,p_approve:approve});if(error)throw error};
 window.homesquareReviewListing=async function(propertyId,approve,reason=''){const {error}=await client.rpc('staff_review_listing',{p_property:propertyId,p_approve:approve,p_reason:reason});if(error)throw error};
-window.homesquareDeletePhoto=async function(photo){await currentUser();const {error}=await client.from('property_photos').delete().eq('id',photo.id);if(error)throw error;const result=await client.storage.from('property-photos').remove([photo.storage_path]);if(result.error)throw result.error};
+window.homesquareDeletePhoto=async function(photo){await currentUser();const {data,error}=await client.from('property_photos').delete().eq('id',photo.id).select('id');if(error)throw error;if(!data?.length)throw new Error('Photo deletion is only allowed on your draft listings');const result=await client.storage.from('property-photos').remove([photo.storage_path]);if(result.error)throw result.error};
 client.auth.onAuthStateChange(()=>{refresh().catch(console.error)});
 refresh().catch(console.error);
 })();

@@ -151,7 +151,22 @@ window.homesquareGetOwnershipEvidence=async function(propertyId){
 };
 window.homesquareReviewOwnership=async function(propertyId,approve){const {error}=await client.rpc('staff_review_ownership',{p_property:propertyId,p_approve:approve});if(error)throw error};
 window.homesquareReviewListing=async function(propertyId,approve,reason=''){const {error}=await client.rpc('staff_review_listing',{p_property:propertyId,p_approve:approve,p_reason:reason});if(error)throw error};
-window.homesquareDeletePhoto=async function(photo){await currentUser();const {data,error}=await client.from('property_photos').delete().eq('id',photo.id).select('id');if(error)throw error;if(!data?.length)throw new Error('Photo deletion is only allowed on your draft listings');const result=await client.storage.from('property-photos').remove([photo.storage_path]);if(result.error)throw result.error};
+window.homesquareDeletePhoto=async function(photo){
+ const user=await currentUser();
+ if(!photo?.id||!photo?.property_id)throw new Error('Missing property photo reference');
+ const {data:listing,error:listingError}=await client.from('properties').select('id').eq('id',photo.property_id).eq('owner_id',user.id).eq('status','draft').maybeSingle();
+ if(listingError)throw listingError;
+ if(!listing)throw new Error('Only photos on your own draft listings can be deleted');
+ const {data:record,error:readError}=await client.from('property_photos').select('id,storage_path').eq('id',photo.id).eq('property_id',photo.property_id).maybeSingle();
+ if(readError)throw readError;
+ if(!record)throw new Error('Photo no longer exists');
+ if(!record.storage_path.startsWith(photo.property_id+'/'))throw new Error('Invalid photo storage location');
+ const {data,error}=await client.from('property_photos').delete().eq('id',photo.id).eq('property_id',photo.property_id).select('id');
+ if(error)throw error;
+ if(!data?.length)throw new Error('Photo deletion was not permitted');
+ const result=await client.storage.from('property-photos').remove([record.storage_path]);
+ if(result.error)throw new Error('Photo record deleted, but storage cleanup failed: '+result.error.message);
+};
 client.auth.onAuthStateChange(()=>{refresh().catch(console.error)});
 refresh().catch(console.error);
 })();

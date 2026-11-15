@@ -29,4 +29,9 @@ const decisions=fs.readFileSync('supabase/migrations/20261115020000_seller_decis
 for(const fn of ['seller_decide_inspection','seller_decide_offer'])assert.ok(decisions.includes('function public.'+fn),'Missing secured decision RPC '+fn);
 assert.ok(html.includes('decideActivity(type,id,decision,propertyId)'),'Seller decisions UI missing');
 assert.ok(client.includes('homesquareDecideInspection')&&client.includes('homesquareDecideOffer'),'Seller decision calls missing');
+const moderation=fs.readFileSync('supabase/migrations/20261115030000_staff_moderation.sql','utf8');
+for(const name of ['staff_review_listing','staff_review_ownership','enforce_property_status_transition'])assert.ok(moderation.includes('function public.'+name),'Missing '+name);
+for(const table of ['staff_members','ownership_checks'])assert.ok(moderation.includes('alter table public.'+table+' enable row level security'),'Missing RLS '+table);
+for(const name of ['homesquareIsStaff','homesquareStaffQueue','homesquareReviewOwnership','homesquareReviewListing','homesquareDeletePhoto'])assert.ok(client.includes(name),'Missing client '+name);
+for(const name of ['showStaff()','showPhotos(id)','declareOwnership(id)'])assert.ok(html.includes(name),'Missing UI '+name);
 console.log('PASS: JS parses, server integrations present, RLS declared, unsafe publish removed');

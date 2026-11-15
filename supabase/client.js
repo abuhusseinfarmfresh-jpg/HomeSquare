@@ -98,7 +98,13 @@ async function insertRow(table,record){const {data,error}=await client.from(tabl
 async function listRows(table,propertyId){const {data,error}=await client.from(table).select('*').eq('property_id',propertyId).order('created_at',{ascending:false});if(error)throw error;return data}
 window.homesquareRequestInspection=async function(propertyId,date,message=''){const user=await currentUser();if(!date||new Date(date)<=new Date())throw new Error('Choose a future inspection time');return insertRow('inspections',{property_id:propertyId,buyer_id:user.id,requested_at:new Date(date).toISOString(),message})};
 window.homesquareSubmitOffer=async function(propertyId,amount,message=''){const user=await currentUser();if(!Number.isFinite(Number(amount))||Number(amount)<=0)throw new Error('Enter a valid offer amount');return insertRow('offers',{property_id:propertyId,buyer_id:user.id,amount:Number(amount),message})};
-window.homesquareSendMessage=async function(propertyId,buyerId,body){const user=await currentUser();return insertRow('messages',{property_id:propertyId,buyer_id:buyerId||user.id,sender_id:user.id,body})};
+window.homesquareSendMessage=async function(propertyId,buyerId,body){
+ const user=await currentUser();
+ const message=String(body||'').trim();
+ if(message.length<2||message.length>5000)throw new Error('Messages must be between 2 and 5,000 characters');
+ if(!propertyId)throw new Error('Choose a property first');
+ return insertRow('messages',{property_id:propertyId,buyer_id:buyerId||user.id,sender_id:user.id,body:message});
+};
 window.homesquareGetMessages=async function(propertyId,buyerId){const {data,error}=await client.from('messages').select('id,buyer_id,sender_id,body,created_at').eq('property_id',propertyId).eq('buyer_id',buyerId).order('created_at');if(error)throw error;return data};
 window.homesquareLoadPropertyMessages=propertyId=>listRows('messages',propertyId);
 window.homesquareDecideInspection=async function(id,decision){const {error}=await client.rpc('seller_decide_inspection',{p_id:id,p_decision:decision});if(error)throw error};

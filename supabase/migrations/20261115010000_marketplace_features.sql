@@ -67,7 +67,7 @@ create policy "owner deletes photo metadata" on public.property_photos for delet
 create policy "owner sees service requests" on public.service_requests for select to authenticated using(owner_id=auth.uid());
 create policy "owner creates service request" on public.service_requests for insert to authenticated with check(owner_id=auth.uid() and status='requested' and (property_id is null or exists(select 1 from public.properties p where p.id=property_id and p.owner_id=auth.uid())));
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
- values('property-photos','property-photos',true,10485760,array['image/jpeg','image/png','image/webp'])
+ values('property-photos','property-photos',false,10485760,array['image/jpeg','image/png','image/webp'])
  on conflict(id) do nothing;
 create policy "public photo access" on storage.objects for select to anon,authenticated using(bucket_id='property-photos' and exists(select 1 from public.property_photos pp join public.properties p on p.id=pp.property_id where pp.storage_path=name and (p.status='published' or p.owner_id=auth.uid())));
 create policy "owner uploads draft photos" on storage.objects for insert to authenticated with check(bucket_id='property-photos' and exists(select 1 from public.properties p where p.id::text=split_part(name,'/',1) and p.owner_id=auth.uid() and p.status='draft'));

@@ -50,11 +50,11 @@ window.homesquareUpdateDraft=async function(id,fields){
  if(error)throw error;return data;
 };
 window.homesquareDeleteDraft=async function(id){
- const {data,error}=await client.from('properties').delete().eq('id',id).eq('status','draft').select('id');
+ const user=await currentUser();const {data,error}=await client.from('properties').delete().eq('id',id).eq('owner_id',user.id).eq('status','draft').select('id');
  if(error)throw error;if(!data?.length)throw new Error('Only your own drafts can be deleted');return true;
 };
 window.homesquareSubmitForReview=async function(id){
- const {data,error}=await client.from('properties').update({status:'pending_review'}).eq('id',id).eq('status','draft').select('id');
+ const user=await currentUser();const {data,error}=await client.from('properties').update({status:'pending_review'}).eq('id',id).eq('owner_id',user.id).eq('status','draft').select('id');
  if(error)throw error;if(!data?.length)throw new Error('Only your own drafts can be submitted');return true;
 };
 window.homesquareLoadEnquiries=async function(propertyId){

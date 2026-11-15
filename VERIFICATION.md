@@ -40,3 +40,10 @@ Stripe is deliberately excluded. GitHub source code was updated for buyer/seller
 6. Legal/privacy review and abuse protection before public launch.
 
 **Verdict: Work in progress, not fully fixed or end-to-end verified.**
+
+## Update — additional implementation
+- Added security-definer seller decision RPCs for confirming/declining inspections and accepting/declining offers, with owner checks and one-way state transitions.
+- Added seller dashboard buttons for these decisions.
+- Added a listing_reviews table for trusted staff moderation audit records. **This does not yet implement staff login or an admin publishing service.**
+- Added source-level regression assertions for the new functions.
+- **No live database or two-account test was performed in this update.** Migration success and CI execution are unconfirmed; do not treat these features as verified live.

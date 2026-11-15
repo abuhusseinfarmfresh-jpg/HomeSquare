@@ -59,7 +59,7 @@ create policy "buyer withdraws offer" on public.offers for update to authenticat
 create policy "thread participants read" on public.messages for select to authenticated using(buyer_id=auth.uid() or exists(select 1 from public.properties p where p.id=property_id and p.owner_id=auth.uid()));
 create policy "thread participants send" on public.messages for insert to authenticated with check(
  (sender_id=auth.uid() and buyer_id=auth.uid() and exists(select 1 from public.properties p where p.id=property_id and p.status='published' and p.owner_id<>auth.uid()))
- or (sender_id=auth.uid() and exists(select 1 from public.properties p where p.id=property_id and p.owner_id=auth.uid()) and exists(select 1 from public.messages m where m.property_id=property_id and m.buyer_id=buyer_id))
+ or (sender_id=auth.uid() and exists(select 1 from public.properties p where p.id=property_id and p.owner_id=auth.uid()) and (exists(select 1 from public.enquiries e where e.property_id=messages.property_id and e.buyer_id=messages.buyer_id) or exists(select 1 from public.inspections i where i.property_id=messages.property_id and i.buyer_id=messages.buyer_id) or exists(select 1 from public.offers o where o.property_id=messages.property_id and o.buyer_id=messages.buyer_id)))
 );
 create policy "public reads published photos" on public.property_photos for select to anon,authenticated using(exists(select 1 from public.properties p where p.id=property_id and (p.status='published' or p.owner_id=auth.uid())));
 create policy "owner adds photo metadata" on public.property_photos for insert to authenticated with check(exists(select 1 from public.properties p where p.id=property_id and p.owner_id=auth.uid() and p.status='draft') and storage_path like property_id::text || '/%');

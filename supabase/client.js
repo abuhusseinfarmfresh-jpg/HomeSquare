@@ -19,7 +19,7 @@ window.homesquareSignIn=async function(e){
  const email=String(f.get('email')||'').trim(),password=String(f.get('password')||''),action=f.get('action');
  if(button){button.disabled=true;button.textContent='Please wait…'}
  try{
- const result=action==='signup'?await client.auth.signUp({email,password}):await client.auth.signInWithPassword({email,password});
+ const result=action==='signup'?await client.auth.signUp({email,password,options:{emailRedirectTo:'https://abuhusseinfarmfresh-jpg.github.io/HomeSquare/marketplace.html'}}):await client.auth.signInWithPassword({email,password});
  if(result.error)throw result.error;
  const active=!!result.data?.session;
  notify(action==='signup'&&!active?'Account created. Check your email to confirm your address before signing in.':'Signed in successfully.');

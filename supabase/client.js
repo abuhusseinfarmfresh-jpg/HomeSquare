@@ -65,6 +65,7 @@ window.homesquareRequestInspection=async function(propertyId,date,message=''){co
 window.homesquareSubmitOffer=async function(propertyId,amount,message=''){const user=await currentUser();if(!Number.isFinite(Number(amount))||Number(amount)<=0)throw new Error('Enter a valid offer amount');return insertRow('offers',{property_id:propertyId,buyer_id:user.id,amount:Number(amount),message})};
 window.homesquareSendMessage=async function(propertyId,buyerId,body){const user=await currentUser();return insertRow('messages',{property_id:propertyId,buyer_id:buyerId||user.id,sender_id:user.id,body})};
 window.homesquareGetMessages=async function(propertyId,buyerId){const {data,error}=await client.from('messages').select('id,buyer_id,sender_id,body,created_at').eq('property_id',propertyId).eq('buyer_id',buyerId).order('created_at');if(error)throw error;return data};
+window.homesquareLoadPropertyMessages=propertyId=>listRows('messages',propertyId);
 window.homesquareLoadInspections=propertyId=>listRows('inspections',propertyId);
 window.homesquareLoadOffers=propertyId=>listRows('offers',propertyId);
 window.homesquareLoadPhotos=async function(propertyId){const {data,error}=await client.from('property_photos').select('id,storage_path').eq('property_id',propertyId);if(error)throw error;return Promise.all(data.map(async p=>{const {data:signed,error:signError}=await client.storage.from('property-photos').createSignedUrl(p.storage_path,3600);if(signError)throw signError;return {...p,url:signed.signedUrl}}))};

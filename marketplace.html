@@ -136,11 +136,26 @@ async function saveDraftChanges(event,id){
  event.preventDefault();const button=event.target.querySelector('[type=submit]');button.disabled=true;button.textContent='Saving…';
  try{const fields=Object.fromEntries(new FormData(event.target));for(const k of ['price','beds','baths'])fields[k]=Number(fields[k]);if(fields.price<=0)throw new Error('Enter a valid asking price');await window.homesquareUpdateDraft(id,fields);closeModal();await renderDashboard()}catch(e){alert('Unable to update listing: '+e.message);button.disabled=false;button.textContent='Save changes'}
 }
-async function submitReview(id){try{await window.homesquareSubmitForReview(id);await renderDashboard()}catch(e){alert(e.message)}}
+const listingOperations=new Set();
+async function submitReview(id){
+ const listing=sellerListingsCache.find(x=>x.id===id);
+ if(!listing||listing.status!=='draft'){alert('Only draft listings can be submitted for review.');return}
+ if(listingOperations.has(id))return;
+ if(!confirm('Submit '+listing.address+' for staff review? You will not be able to edit it while it is under review.'))return;
+ listingOperations.add(id);
+ try{await window.homesquareSubmitForReview(id);await renderDashboard();alert('Listing submitted for review. It is not publicly visible until approved.')}
+ catch(e){alert('Unable to submit listing: '+e.message)}
+ finally{listingOperations.delete(id)}
+}
 async function removeListing(id){
- if(!window.homesquareBackendReady){alert('Sign in to manage your listings');return}
- if(!confirm('Delete this draft listing?'))return;
- try{await window.homesquareDeleteDraft(id);await renderDashboard()}catch(e){alert(e.message)}
+ const listing=sellerListingsCache.find(x=>x.id===id);
+ if(!listing||listing.status!=='draft'){alert('Only your draft listings can be deleted.');return}
+ if(listingOperations.has(id))return;
+ if(!confirm('Permanently delete the draft for '+listing.address+'? This cannot be undone.'))return;
+ listingOperations.add(id);
+ try{await window.homesquareDeleteDraft(id);await renderDashboard()}
+ catch(e){alert('Unable to delete draft: '+e.message)}
+ finally{listingOperations.delete(id)}
 }
 const listingDraft={};let listingStep=0;let listingPhotoFiles=[];let sellerListingsCache=[];let listingAwaitingSignIn=false;
 const listingSteps=[

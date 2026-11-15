@@ -58,6 +58,26 @@ window.homesquareLoadMyEnquiries=async function(){
  const {data,error}=await client.from('enquiries').select('id,property_id,kind,message,proposed_amount,created_at').eq('buyer_id',user.id).order('created_at',{ascending:false});
  if(error)throw error;return data;
 };
+async function currentUser(){const {data:{user},error}=await client.auth.getUser();if(error||!user)throw new Error('Sign in first');return user}
+async function insertRow(table,record){const {data,error}=await client.from(table).insert(record).select().single();if(error)throw error;return data}
+async function listRows(table,propertyId){const {data,error}=await client.from(table).select('*').eq('property_id',propertyId).order('created_at',{ascending:false});if(error)throw error;return data}
+window.homesquareRequestInspection=async function(propertyId,date,message=''){const user=await currentUser();if(!date||new Date(date)<=new Date())throw new Error('Choose a future inspection time');return insertRow('inspections',{property_id:propertyId,buyer_id:user.id,requested_at:new Date(date).toISOString(),message})};
+window.homesquareSubmitOffer=async function(propertyId,amount,message=''){const user=await currentUser();if(!Number.isFinite(Number(amount))||Number(amount)<=0)throw new Error('Enter a valid offer amount');return insertRow('offers',{property_id:propertyId,buyer_id:user.id,amount:Number(amount),message})};
+window.homesquareSendMessage=async function(propertyId,buyerId,body){const user=await currentUser();return insertRow('messages',{property_id:propertyId,buyer_id:buyerId||user.id,sender_id:user.id,body})};
+window.homesquareGetMessages=async function(propertyId,buyerId){const {data,error}=await client.from('messages').select('id,buyer_id,sender_id,body,created_at').eq('property_id',propertyId).eq('buyer_id',buyerId).order('created_at');if(error)throw error;return data};
+window.homesquareLoadInspections=propertyId=>listRows('inspections',propertyId);
+window.homesquareLoadOffers=propertyId=>listRows('offers',propertyId);
+window.homesquareLoadPhotos=async function(propertyId){const {data,error}=await client.from('property_photos').select('id,storage_path').eq('property_id',propertyId);if(error)throw error;return data.map(p=>({...p,url:client.storage.from('property-photos').getPublicUrl(p.storage_path).data.publicUrl}))};
+window.homesquareUploadPhoto=async function(propertyId,file){
+ await currentUser();
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10485760)throw new Error('Use JPG, PNG or WebP under 10 MB');
+ const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type],path=propertyId+'/'+crypto.randomUUID()+'.'+ext;
+ const {error}=await client.storage.from('property-photos').upload(path,file,{contentType:file.type,upsert:false});if(error)throw error;
+ try{return await insertRow('property_photos',{property_id:propertyId,storage_path:path})}
+ catch(e){await client.storage.from('property-photos').remove([path]);throw e}
+};
+window.homesquareRequestService=async function(propertyId,service,details=''){const user=await currentUser();return insertRow('service_requests',{owner_id:user.id,property_id:propertyId||null,service,details})};
+window.homesquareLoadServices=async function(){const user=await currentUser();const {data,error}=await client.from('service_requests').select('*').eq('owner_id',user.id).order('created_at',{ascending:false});if(error)throw error;return data};
 client.auth.onAuthStateChange(()=>{refresh().catch(console.error)});
 refresh().catch(console.error);
 })();

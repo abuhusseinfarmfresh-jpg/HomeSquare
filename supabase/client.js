@@ -50,7 +50,7 @@ window.homesquareSubmitForReview=async function(id){
  if(error)throw error;if(!data?.length)throw new Error('Only your own drafts can be submitted');return true;
 };
 window.homesquareLoadEnquiries=async function(propertyId){
- const {data,error}=await client.from('enquiries').select('id,kind,message,proposed_amount,created_at').eq('property_id',propertyId).order('created_at',{ascending:false});
+ const {data,error}=await client.from('enquiries').select('id,buyer_id,kind,message,proposed_amount,created_at').eq('property_id',propertyId).order('created_at',{ascending:false});
  if(error)throw error;return data;
 };
 window.homesquareLoadMyEnquiries=async function(){
@@ -66,6 +66,8 @@ window.homesquareSubmitOffer=async function(propertyId,amount,message=''){const 
 window.homesquareSendMessage=async function(propertyId,buyerId,body){const user=await currentUser();return insertRow('messages',{property_id:propertyId,buyer_id:buyerId||user.id,sender_id:user.id,body})};
 window.homesquareGetMessages=async function(propertyId,buyerId){const {data,error}=await client.from('messages').select('id,buyer_id,sender_id,body,created_at').eq('property_id',propertyId).eq('buyer_id',buyerId).order('created_at');if(error)throw error;return data};
 window.homesquareLoadPropertyMessages=propertyId=>listRows('messages',propertyId);
+window.homesquareDecideInspection=async function(id,decision){const {error}=await client.rpc('seller_decide_inspection',{p_id:id,p_decision:decision});if(error)throw error};
+window.homesquareDecideOffer=async function(id,decision){const {error}=await client.rpc('seller_decide_offer',{p_id:id,p_decision:decision});if(error)throw error};
 window.homesquareLoadInspections=propertyId=>listRows('inspections',propertyId);
 window.homesquareLoadOffers=propertyId=>listRows('offers',propertyId);
 window.homesquareLoadPhotos=async function(propertyId){const {data,error}=await client.from('property_photos').select('id,storage_path').eq('property_id',propertyId);if(error)throw error;return Promise.all(data.map(async p=>{const {data:signed,error:signError}=await client.storage.from('property-photos').createSignedUrl(p.storage_path,3600);if(signError)throw signError;return {...p,url:signed.signedUrl}}))};

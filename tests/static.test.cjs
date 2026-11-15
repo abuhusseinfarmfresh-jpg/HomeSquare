@@ -40,4 +40,11 @@ assert.ok(evidence.includes('protect_ownership_review'),'Ownership self-verifica
 assert.ok(evidence.includes('Supporting ownership evidence must be uploaded'),'Staff approval must require evidence');
 for(const fn of ['homesquareUploadOwnershipEvidence','homesquareGetOwnershipEvidence'])assert.ok(client.includes(fn),'Missing '+fn);
 for(const fn of ['uploadEvidence(id)','viewEvidence(id)'])assert.ok(html.includes(fn),'Missing '+fn);
+const bookings=fs.readFileSync('supabase/migrations/20261115050000_service_booking.sql','utf8');
+assert.ok(bookings.includes('function public.staff_update_service'),'Booking management RPC missing');
+assert.ok(bookings.includes('Staff access required'),'Staff booking guard missing');
+const feed=fs.readFileSync('supabase/migrations/20261115060000_activity_feed.sql','utf8');
+assert.ok(feed.includes('security_invoker=true'),'Activity view must enforce table RLS');
+for(const fn of ['homesquareLoadBuyerActivity','homesquareStaffServices','homesquareStaffUpdateService'])assert.ok(client.includes(fn),'Missing '+fn);
+for(const fn of ['showBuyerDashboard()','staffServices()','showServiceBookings()','hydratePropertyPhotos('])assert.ok(html.includes(fn),'Missing '+fn);
 console.log('PASS: JS parses, server integrations present, RLS declared, unsafe publish removed');

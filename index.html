@@ -93,7 +93,7 @@ async function submitOffer(id){
 }
 async function messageOwner(id){
  const message=prompt('Message to the owner');if(!message)return;
- try{await window.homesquareSendMessage(id,null,message);alert('Message saved to the property conversation.')}catch(e){alert(e.message)}
+ try{await window.homesquareSendEnquiry(id,'general',message);await window.homesquareSendMessage(id,null,message);alert('Message saved to the property conversation.')}catch(e){alert(e.message)}
 }
 renderFeatured();
 </script><section class="wrap section" id="account"><div class="dashboard"><h2>HomeSquare account</h2><p id="accountStatus">Backend not configured yet</p><form id="authForm" onsubmit="homesquareSignIn(event)"><div class="field"><label>Email</label><input type="email" name="email" required autocomplete="email"></div><div class="field"><label>Password</label><input type="password" name="password" minlength="6" required autocomplete="current-password"></div><div class="field"><label>Action</label><select name="action"><option value="signin">Sign in</option><option value="signup">Create account</option></select></div><button class="btn">Continue</button></form><button id="signOut" class="btn alt" onclick="homesquareSignOut()" hidden>Sign out</button><p id="accountMessage" role="status"></p><p class="muted small">Use your account to manage listings and enquiries. Listings are reviewed before publication.</p></div></section><script src="supabase/config.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script src="supabase/client.js"></script></body></html>

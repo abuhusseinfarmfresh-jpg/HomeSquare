@@ -47,3 +47,12 @@ Stripe is deliberately excluded. GitHub source code was updated for buyer/seller
 - Added a listing_reviews table for trusted staff moderation audit records. **This does not yet implement staff login or an admin publishing service.**
 - Added source-level regression assertions for the new functions.
 - **No live database or two-account test was performed in this update.** Migration success and CI execution are unconfirmed; do not treat these features as verified live.
+
+## Update — staff moderation, declarations, gallery
+- Staff review queue and listing/ownership review RPCs implemented in source.
+- Staff membership requires trusted server-side provisioning; **no staff account has been provisioned or verified**.
+- Seller ownership declarations implemented; declarations alone are **not ownership evidence**. Document verification remains required.
+- Photo gallery and draft photo deletion UI implemented.
+- 15/15 additional source checks passed (JavaScript syntax, integration hooks, RLS declarations, staff guard).
+- **Latest migration deployment, CI run, live browser tests and two-account RLS tests are still unverified**.
+- Do not publish customer listings until staff vetting, legal/privacy review and live security tests are completed.

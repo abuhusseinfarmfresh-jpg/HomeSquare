@@ -36,9 +36,26 @@ window.homesquareLoadProperties=async function(){
 const {data,error}=await client.from('properties').select('id,address,suburb,state,property_type,price,beds,baths,status').eq('status','published').order('created_at',{ascending:false}).limit(100);
 if(error)throw error;return data;
 };
+function validateListingFields(fields,partial=false){
+ const allowed=['address','suburb','state','property_type','price','beds','baths'];
+ const result=Object.fromEntries(Object.entries(fields||{}).filter(([k])=>allowed.includes(k)));
+ if(!partial&&allowed.some(k=>result[k]===undefined))throw new Error('Complete all required listing details');
+ for(const k of ['address','suburb','state','property_type']){
+  if(result[k]===undefined)continue;
+  result[k]=String(result[k]).trim();
+  if(!result[k]||result[k].length>180)throw new Error('Enter a valid '+k.replaceAll('_',' '));
+ }
+ if(result.state!==undefined&&!['NSW','VIC','QLD','WA','SA','TAS','ACT','NT'].includes(result.state))throw new Error('Choose an Australian state or territory');
+ for(const k of ['price','beds','baths']){
+  if(result[k]===undefined)continue;
+  result[k]=Number(result[k]);
+  if(!Number.isFinite(result[k])||result[k]<0||(k==='price'&&result[k]===0)||(k!=='price'&&(!Number.isInteger(result[k])||result[k]>100)))throw new Error('Enter a valid '+k);
+ }
+ return result;
+}
 window.homesquareCreateDraft=async function(fields){
 const {data:{user},error:authError}=await client.auth.getUser();if(authError||!user)throw new Error('Sign in first');
-const {data,error}=await client.from('properties').insert({...fields,owner_id:user.id,status:'draft'}).select().single();
+const {data,error}=await client.from('properties').insert({...validateListingFields(fields),owner_id:user.id,status:'draft'}).select().single();
 if(error)throw error;return data;
 };
 window.homesquareSendEnquiry=async function(property_id,kind,message,proposed_amount=null){
@@ -54,8 +71,7 @@ window.homesquareLoadMyProperties=async function(){
 };
 window.homesquareUpdateDraft=async function(id,fields){
  const user=await currentUser();
- const allowed=['address','suburb','state','property_type','price','beds','baths'];
- const updates=Object.fromEntries(Object.entries(fields).filter(([k])=>allowed.includes(k)));
+ const updates=validateListingFields(fields,true);
  if(!Object.keys(updates).length)throw new Error('No listing changes supplied');
  const {data,error}=await client.from('properties').update(updates).eq('id',id).eq('owner_id',user.id).eq('status','draft').select('id').single();
  if(error)throw error;return data;

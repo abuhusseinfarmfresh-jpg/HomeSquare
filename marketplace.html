@@ -115,12 +115,24 @@ function renderFeatured(){$('featured').innerHTML='<div class="empty">Loading pr
  if(window.homesquareBackendReady){
   $('dashboard').textContent='Loading your listings…';
   try{
-   const mine=await window.homesquareLoadMyProperties();
-   $('dashboard').innerHTML=mine.length?mine.map(l=>'<div style="padding:15px;border-bottom:1px solid #e5ebf2"><strong>'+escapeHTML(l.address)+'</strong> · '+money(l.price)+' <span class="pill">'+escapeHTML(l.status)+'</span><div class="row">'+(l.status==='draft'?'<button class="btn alt" onclick="submitReview(\''+l.id+'\')">Submit for review</button><button class="btn alt" onclick="removeListing(\''+l.id+'\')">Delete draft</button>':'')+'<button class="btn alt" onclick="viewEnquiries(\''+l.id+'\')">Enquiries</button><button class="btn alt" onclick="viewConversations(\''+l.id+'\')">Messages</button><button class="btn alt" onclick="showPhotos(\''+l.id+'\')">Photos</button><button class="btn alt" onclick="declareOwnership(\''+l.id+'\')">Ownership</button><button class="btn alt" onclick="uploadEvidence(\''+l.id+'\')">Evidence</button><button class="btn alt" onclick="viewActivity(\''+l.id+'\')">Inspections & offers</button><button class="btn alt" onclick="uploadPhoto(\''+l.id+'\')">Upload photo</button><button class="btn alt" onclick="requestService(\''+l.id+'\')">Photography / signboard</button></div></div>').join(''):'<div class="empty">No listings yet. Create your first property listing.</div>';
+   const mine=await window.homesquareLoadMyProperties();sellerListingsCache=mine;
+   $('dashboard').innerHTML=mine.length?mine.map(l=>'<div style="padding:15px;border-bottom:1px solid #e5ebf2"><strong>'+escapeHTML(l.address)+'</strong> · '+money(l.price)+' <span class="pill">'+escapeHTML(l.status)+'</span><div class="row">'+(l.status==='draft'?'<button class="btn alt" onclick="editDraft(\''+l.id+'\')">Edit details</button><button class="btn alt" onclick="submitReview(\''+l.id+'\')">Submit for review</button><button class="btn alt" onclick="removeListing(\''+l.id+'\')">Delete draft</button>':'')+'<button class="btn alt" onclick="viewEnquiries(\''+l.id+'\')">Enquiries</button><button class="btn alt" onclick="viewConversations(\''+l.id+'\')">Messages</button><button class="btn alt" onclick="showPhotos(\''+l.id+'\')">Photos</button><button class="btn alt" onclick="declareOwnership(\''+l.id+'\')">Ownership</button><button class="btn alt" onclick="uploadEvidence(\''+l.id+'\')">Evidence</button><button class="btn alt" onclick="viewActivity(\''+l.id+'\')">Inspections & offers</button><button class="btn alt" onclick="uploadPhoto(\''+l.id+'\')">Upload photo</button><button class="btn alt" onclick="requestService(\''+l.id+'\')">Photography / signboard</button></div></div>').join(''):'<div class="empty">No listings yet. Create your first property listing.</div>';
   }catch(e){$('dashboard').textContent='Unable to load your listings: '+e.message}
   return;
  }
  $('dashboard').innerHTML='<div class="empty">Connect to Supabase to manage listings securely.</div>';
+}
+function editDraft(id){
+ const listing=sellerListingsCache.find(l=>l.id===id&&l.status==='draft');
+ if(!listing){alert('Only your own draft listings can be edited.');return}
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Edit your property';
+ const fields=[['Street address','address','text'],['Suburb','suburb','text'],['State','state','select'],['Property type','property_type','select'],['Asking price (AUD)','price','number'],['Bedrooms','beds','number'],['Bathrooms','baths','number']];
+ const states=['NSW','VIC','QLD','WA','SA','TAS','ACT','NT'],types=['House','Apartment','Unit','Townhouse','Villa','Duplex','Land','Acreage','Rural'];
+ $('modalBody').innerHTML='<p class="muted">Changes are saved privately. Your property remains a draft until you submit it for review.</p><form onsubmit="saveDraftChanges(event,\''+id+'\')">'+fields.map(([label,name,type])=>'<div class="field"><label>'+label+'</label>'+(type==='select'?'<select name="'+name+'">'+(name==='state'?states:types).map(v=>'<option value="'+v+'" '+(listing[name]===v?'selected':'')+'>'+v+'</option>').join('')+'</select>':'<input name="'+name+'" type="'+type+'" required '+(type==='number'?'min="0" step="1"':'')+' value="'+escapeHTML(listing[name]??'')+'">')+'</div>').join('')+'<button class="btn" type="submit">Save changes</button></form>';
+}
+async function saveDraftChanges(event,id){
+ event.preventDefault();const button=event.target.querySelector('[type=submit]');button.disabled=true;button.textContent='Saving…';
+ try{const fields=Object.fromEntries(new FormData(event.target));for(const k of ['price','beds','baths'])fields[k]=Number(fields[k]);if(fields.price<=0)throw new Error('Enter a valid asking price');await window.homesquareUpdateDraft(id,fields);closeModal();await renderDashboard()}catch(e){alert('Unable to update listing: '+e.message);button.disabled=false;button.textContent='Save changes'}
 }
 async function submitReview(id){try{await window.homesquareSubmitForReview(id);await renderDashboard()}catch(e){alert(e.message)}}
 async function removeListing(id){
@@ -128,7 +140,7 @@ async function removeListing(id){
  if(!confirm('Delete this draft listing?'))return;
  try{await window.homesquareDeleteDraft(id);await renderDashboard()}catch(e){alert(e.message)}
 }
-const listingDraft={};let listingStep=0;let listingPhotoFiles=[];
+const listingDraft={};let listingStep=0;let listingPhotoFiles=[];let sellerListingsCache=[];
 const listingSteps=[
  {title:'Where is your property?',hint:'Start with the address buyers will search for.',fields:[['Street address','address','text'],['Suburb','suburb','text']]},
  {title:'Tell us about the home',hint:'Choose the property type and state.',fields:[['State or territory','state','state'],['Property type','type','type']]},

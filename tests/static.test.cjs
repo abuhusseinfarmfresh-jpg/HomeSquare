@@ -25,4 +25,8 @@ assert.ok(html.includes('requestInspection(id)'),'Inspection UI missing');
 assert.ok(html.includes('submitOffer(id)'),'Offer UI missing');
 assert.ok(html.includes('messageOwner(id)'),'Message UI missing');
 assert.ok(features.includes("'property-photos',false"),'Photo bucket must remain private');
+const decisions=fs.readFileSync('supabase/migrations/20261115020000_seller_decisions.sql','utf8');
+for(const fn of ['seller_decide_inspection','seller_decide_offer'])assert.ok(decisions.includes('function public.'+fn),'Missing secured decision RPC '+fn);
+assert.ok(html.includes('decideActivity(type,id,decision,propertyId)'),'Seller decisions UI missing');
+assert.ok(client.includes('homesquareDecideInspection')&&client.includes('homesquareDecideOffer'),'Seller decision calls missing');
 console.log('PASS: JS parses, server integrations present, RLS declared, unsafe publish removed');

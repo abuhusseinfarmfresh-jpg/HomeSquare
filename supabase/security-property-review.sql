@@ -7,6 +7,19 @@ returns trigger language plpgsql set search_path = '' as $$
 begin
   -- Trusted service-role moderation can publish/archive. Never put its key in the browser.
   if auth.role() = 'service_role' then return new; end if;
+  -- Staff RPCs run as database-owner SECURITY DEFINER functions.
+  -- Permit only staff-authenticated review of pending listings, with no field edits.
+  if current_user = 'postgres'
+     and auth.uid() is not null
+     and exists(select 1 from public.staff_members sm where sm.user_id=auth.uid())
+     and old.status = 'pending_review'
+     and new.status in ('published','draft')
+     and new.id is not distinct from old.id
+     and new.owner_id is not distinct from old.owner_id
+     and (new.address,new.suburb,new.state,new.property_type,new.price,new.beds,new.baths,new.description,new.postcode)
+         is not distinct from
+         (old.address,old.suburb,old.state,old.property_type,old.price,old.beds,old.baths,old.description,old.postcode)
+  then return new; end if;
   if auth.uid() is null or old.owner_id is distinct from auth.uid() then
     raise exception 'Only the listing owner may edit this property';
   end if;

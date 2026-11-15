@@ -84,7 +84,7 @@ window.homesquareLoadServices=async function(){const user=await currentUser();co
 window.homesquareIsStaff=async function(){const user=await currentUser();const {data,error}=await client.from('staff_members').select('user_id').eq('user_id',user.id).maybeSingle();if(error)throw error;return !!data};
 window.homesquareStaffQueue=async function(){const [properties,checks]=await Promise.all([
  client.from('properties').select('id,address,suburb,status,owner_id').eq('status','pending_review').order('created_at',{ascending:false}),
- client.from('ownership_checks').select('property_id,owner_id,status,declaration').eq('status','pending')
+ client.from('ownership_checks').select('property_id,owner_id,status,declaration,evidence_path').eq('status','pending')
 ]);if(properties.error)throw properties.error;if(checks.error)throw checks.error;return {properties:properties.data,checks:checks.data}};
 window.homesquareSubmitOwnership=async function(propertyId,declaration){const user=await currentUser();return insertRow('ownership_checks',{property_id:propertyId,owner_id:user.id,declaration})};
 window.homesquareUploadOwnershipEvidence=async function(propertyId,file){

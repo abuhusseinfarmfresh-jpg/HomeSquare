@@ -71,4 +71,15 @@ const oldShow=showModal;showModal=()=>{step=0;openPage('sell')};document.querySe
 <script>
 function toggleHomeMenu(button){const nav=document.getElementById('mobileNav');const open=nav.classList.toggle('open');button.setAttribute('aria-expanded',String(open));button.textContent=open?'✕':'☰'}
 function closeHomeMenu(){const nav=document.getElementById('mobileNav');if(nav)nav.classList.remove('open');const b=document.querySelector('.menu');if(b){b.setAttribute('aria-expanded','false');b.textContent='☰'}}
+</script><script id="homesquare-live-bridge">
+/* The approved design is the public front door; account actions use the connected app. */
+(function(){
+const go=(view,search)=>{const url=new URL('marketplace.html',location.href);url.searchParams.set('view',view);if(search)url.searchParams.set('q',search);location.assign(url.href)};
+window.showModal=()=>go('listing');
+window.searchHomes=()=>go('search',document.getElementById('search')?.value.trim()||'');
+const previous=window.openPage;
+window.openPage=function(name){if(['sell','seller','buyer','listing','dashboard'].includes(name))return go(name==='buyer'?'buyer':name==='sell'?'listing':name==='seller'?'seller':name);return previous.apply(this,arguments)};
+const mobile=document.getElementById('mobileNav');
+if(mobile){const a=document.createElement('a');a.href='marketplace.html?view=account';a.textContent='Sign in / Create account';mobile.appendChild(a)}
+})();
 </script></body></html>

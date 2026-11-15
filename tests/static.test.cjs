@@ -15,4 +15,14 @@ assert.ok(html.includes('homesquareLoadMyProperties()'),'Dashboard should load s
 assert.ok(html.includes('homesquareLoadEnquiries(id)'),'Seller inbox should load server enquiries');
 assert.ok(html.includes('name="amount"'),'Enquiries should support indicative offers');
 assert.ok(html.includes('homesquareSignIn(event)'),'Account form must exist');
+const features=fs.readFileSync('supabase/migrations/20261115010000_marketplace_features.sql','utf8');
+for(const table of ['inspections','offers','messages','property_photos','service_requests']) {
+ assert.ok(features.includes('create table public.'+table),'Missing '+table);
+ assert.ok(features.includes('alter table public.'+table+' enable row level security'),'Missing RLS for '+table);
+}
+for(const method of ['homesquareRequestInspection','homesquareSubmitOffer','homesquareSendMessage','homesquareGetMessages','homesquareUploadPhoto','homesquareRequestService'])assert.ok(client.includes(method),'Missing '+method);
+assert.ok(html.includes('requestInspection(id)'),'Inspection UI missing');
+assert.ok(html.includes('submitOffer(id)'),'Offer UI missing');
+assert.ok(html.includes('messageOwner(id)'),'Message UI missing');
+assert.ok(features.includes("'property-photos',false"),'Photo bucket must remain private');
 console.log('PASS: JS parses, server integrations present, RLS declared, unsafe publish removed');

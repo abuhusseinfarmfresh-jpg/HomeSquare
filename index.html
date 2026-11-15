@@ -56,6 +56,22 @@ async function viewActivity(id){
  $('modalBody').innerHTML='<h3>Inspection requests</h3>'+(inspections.map(i=>'<p>'+escapeHTML(new Date(i.requested_at).toLocaleString('en-AU'))+' — '+escapeHTML(i.status)+' — '+escapeHTML(i.message)+'</p>').join('')||'<p>No requests</p>')+'<h3>Offers</h3>'+(offers.map(o=>'<p>'+money(o.amount)+' — '+escapeHTML(o.status)+' — '+escapeHTML(o.message)+'</p>').join('')||'<p>No offers</p>');
  }catch(e){$('modalBody').textContent=e.message}
 }
+async function viewConversations(id){
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Buyer conversations';$('modalBody').textContent='Loading…';
+ try{
+ const [enquiries,inspections,offers]=await Promise.all([window.homesquareLoadEnquiries(id),window.homesquareLoadInspections(id),window.homesquareLoadOffers(id)]);
+ const buyerIds=[...new Set([...enquiries,...inspections,...offers].map(x=>x.buyer_id).filter(Boolean))];
+ $('modalBody').innerHTML=buyerIds.length?buyerIds.map(buyerId=>'<div class="dashboard"><p>Buyer reference: '+escapeHTML(buyerId.slice(0,8))+'</p><button class="btn alt" onclick="openConversation(\''+id+'\',\''+buyerId+'\')">Open conversation</button></div>').join(''):'<p>No buyer conversations yet.</p>';
+ }catch(e){$('modalBody').textContent=e.message}
+}
+async function openConversation(id,buyerId){
+ $('overlay').classList.remove('hidden');$('modalTitle').textContent='Property conversation';$('modalBody').textContent='Loading…';
+ try{
+ const messages=await window.homesquareGetMessages(id,buyerId);
+ $('modalBody').innerHTML=messages.map(m=>'<div class="dashboard"><p>'+escapeHTML(m.body)+'</p><span class="muted small">'+escapeHTML(new Date(m.created_at).toLocaleString('en-AU'))+'</span></div>').join('')+'<form onsubmit="replyConversation(event,\''+id+'\',\''+buyerId+'\')"><div class="field"><label>Reply</label><textarea name="body" maxlength="5000" required></textarea></div><button class="btn">Send reply</button></form>';
+ }catch(e){$('modalBody').textContent=e.message}
+}
+async function replyConversation(e,id,buyerId){e.preventDefault();try{await window.homesquareSendMessage(id,buyerId,new FormData(e.target).get('body'));await openConversation(id,buyerId)}catch(error){alert(error.message)}}
 async function uploadPhoto(id){
  const input=document.createElement('input');input.type='file';input.accept='image/jpeg,image/png,image/webp';
  input.onchange=async()=>{if(!input.files?.[0])return;try{await window.homesquareUploadPhoto(id,input.files[0]);alert('Photo uploaded successfully')}catch(e){alert('Upload failed: '+e.message)}};input.click();

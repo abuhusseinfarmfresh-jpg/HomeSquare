@@ -7,12 +7,12 @@ if(!client){console.error('Supabase client unavailable');return}
 window.homesquareBackendReady=true;
 window.homesquareDb=client;
 const el=id=>document.getElementById(id);
-function notify(message){el('accountMessage').textContent=message}
+function notify(message){const target=el('accountMessage');if(target)target.textContent=message}
 async function refresh(){
 const {data:{user}}=await client.auth.getUser();
-el('accountStatus').textContent=user?'Signed in: '+user.email:'Not signed in';
-el('signOut').hidden=!user;
-el('authForm').hidden=!!user;
+if(el('accountStatus'))el('accountStatus').textContent=user?'Signed in: '+user.email:'Not signed in';
+if(el('signOut'))el('signOut').hidden=!user;
+if(el('authForm'))el('authForm').hidden=!!user;
 }
 window.homesquareSignIn=async function(e){
 e.preventDefault();const f=new FormData(e.target),email=String(f.get('email')),password=String(f.get('password'));
@@ -39,6 +39,14 @@ window.homesquareLoadMyProperties=async function(){
  const {data:{user},error:authError}=await client.auth.getUser();
  if(authError||!user)throw new Error('Sign in to view your listings');
  const {data,error}=await client.from('properties').select('id,address,suburb,state,property_type,price,beds,baths,status,created_at').eq('owner_id',user.id).order('created_at',{ascending:false});
+ if(error)throw error;return data;
+};
+window.homesquareUpdateDraft=async function(id,fields){
+ const user=await currentUser();
+ const allowed=['address','suburb','state','property_type','price','beds','baths'];
+ const updates=Object.fromEntries(Object.entries(fields).filter(([k])=>allowed.includes(k)));
+ if(!Object.keys(updates).length)throw new Error('No listing changes supplied');
+ const {data,error}=await client.from('properties').update(updates).eq('id',id).eq('owner_id',user.id).eq('status','draft').select('id').single();
  if(error)throw error;return data;
 };
 window.homesquareDeleteDraft=async function(id){

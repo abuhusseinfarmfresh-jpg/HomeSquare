@@ -15,12 +15,23 @@ if(el('signOut'))el('signOut').hidden=!user;
 if(el('authForm'))el('authForm').hidden=!!user;
 }
 window.homesquareSignIn=async function(e){
-e.preventDefault();const f=new FormData(e.target),email=String(f.get('email')),password=String(f.get('password'));
-const action=f.get('action');const result=action==='signup'?await client.auth.signUp({email,password}):await client.auth.signInWithPassword({email,password});
-notify(result.error?result.error.message:action==='signup'?'Account created. Check your email if confirmation is required.':'Signed in successfully.');
-await refresh();
+ e.preventDefault();const form=e.target,button=form.querySelector('button[type=submit]'),f=new FormData(form);
+ const email=String(f.get('email')||'').trim(),password=String(f.get('password')||''),action=f.get('action');
+ if(button){button.disabled=true;button.textContent='Please wait…'}
+ try{
+ const result=action==='signup'?await client.auth.signUp({email,password}):await client.auth.signInWithPassword({email,password});
+ if(result.error)throw result.error;
+ const active=!!result.data?.session;
+ notify(action==='signup'&&!active?'Account created. Check your email to confirm your address before signing in.':'Signed in successfully.');
+ await refresh();
+ if(active&&typeof window.resumeListingAfterSignIn==='function')window.resumeListingAfterSignIn();
+ }catch(error){notify('Unable to continue: '+error.message)}
+ finally{if(button){button.disabled=false;button.textContent='Continue'}}
 };
-window.homesquareSignOut=async function(){await client.auth.signOut();notify('Signed out.');await refresh()};
+window.homesquareSignOut=async function(){
+ const {error}=await client.auth.signOut();if(error){notify('Unable to sign out: '+error.message);return}
+ notify('Signed out.');await refresh();
+};
 window.homesquareLoadProperties=async function(){
 const {data,error}=await client.from('properties').select('id,address,suburb,state,property_type,price,beds,baths,status').eq('status','published').order('created_at',{ascending:false}).limit(100);
 if(error)throw error;return data;

@@ -113,7 +113,10 @@ window.homesquareLoadInspections=propertyId=>listRows('inspections',propertyId);
 window.homesquareLoadOffers=propertyId=>listRows('offers',propertyId);
 window.homesquareLoadPhotos=async function(propertyId){const {data,error}=await client.from('property_photos').select('id,storage_path').eq('property_id',propertyId);if(error)throw error;return Promise.all(data.map(async p=>{const {data:signed,error:signError}=await client.storage.from('property-photos').createSignedUrl(p.storage_path,3600);if(signError)throw signError;return {...p,url:signed.signedUrl}}))};
 window.homesquareUploadPhoto=async function(propertyId,file){
- await currentUser();
+ const user=await currentUser();
+ const {data:owned,error:ownershipError}=await client.from('properties').select('id').eq('id',propertyId).eq('owner_id',user.id).eq('status','draft').maybeSingle();
+ if(ownershipError)throw ownershipError;
+ if(!owned)throw new Error('Only your own draft listings can accept photo uploads');
  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10485760)throw new Error('Use JPG, PNG or WebP under 10 MB');
  const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type],path=propertyId+'/'+crypto.randomUUID()+'.'+ext;
  const {error}=await client.storage.from('property-photos').upload(path,file,{contentType:file.type,upsert:false});if(error)throw error;
@@ -132,13 +135,16 @@ window.homesquareStaffQueue=async function(){const [properties,checks]=await Pro
 ]);if(properties.error)throw properties.error;if(checks.error)throw checks.error;return {properties:properties.data,checks:checks.data}};
 window.homesquareSubmitOwnership=async function(propertyId,declaration){const user=await currentUser();return insertRow('ownership_checks',{property_id:propertyId,owner_id:user.id,declaration})};
 window.homesquareUploadOwnershipEvidence=async function(propertyId,file){
- await currentUser();
+ const user=await currentUser();
+ const {data:owned,error:ownershipError}=await client.from('properties').select('id').eq('id',propertyId).eq('owner_id',user.id).maybeSingle();
+ if(ownershipError)throw ownershipError;
+ if(!owned)throw new Error('You must own this property to upload evidence');
  if(!['application/pdf','image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10485760)throw new Error('Upload PDF, JPG, PNG or WebP under 10 MB');
  const extension=({'application/pdf':'pdf','image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type];
  const path=propertyId+'/'+crypto.randomUUID()+'.'+extension;
  const upload=await client.storage.from('ownership-evidence').upload(path,file,{contentType:file.type,upsert:false});
  if(upload.error)throw upload.error;
- const update=await client.from('ownership_checks').update({evidence_path:path}).eq('property_id',propertyId).eq('status','pending').select('property_id');
+ const update=await client.from('ownership_checks').update({evidence_path:path}) .eq('property_id',propertyId).eq('owner_id',user.id).eq('status','pending').select('property_id');
  if(update.error||!update.data?.length){await client.storage.from('ownership-evidence').remove([path]);throw update.error||new Error('Submit your ownership declaration before uploading evidence')}
  return path;
 };

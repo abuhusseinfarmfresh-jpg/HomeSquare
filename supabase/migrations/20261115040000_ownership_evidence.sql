@@ -35,3 +35,16 @@ begin
 end $$;
 create trigger protect_ownership_check before update on public.ownership_checks
 for each row execute function public.protect_ownership_review();
+
+-- Require supporting evidence before staff may approve a declaration.
+create or replace function public.staff_review_ownership(p_property uuid,p_approve boolean)
+returns void language plpgsql security definer set search_path='' as $$
+begin
+ if not exists(select 1 from public.staff_members s where s.user_id=(select auth.uid())) then raise exception 'Staff access required'; end if;
+ if p_approve and not exists(select 1 from public.ownership_checks c where c.property_id=p_property and c.status='pending' and c.evidence_path is not null and exists(select 1 from storage.objects o where o.bucket_id='ownership-evidence' and o.name=c.evidence_path)) then
+  raise exception 'Supporting ownership evidence must be uploaded before approval';
+ end if;
+ update public.ownership_checks set status=case when p_approve then 'verified' else 'rejected' end,reviewer_id=(select auth.uid()),reviewed_at=now()
+ where property_id=p_property and status='pending';
+ if not found then raise exception 'No pending ownership check'; end if;
+end $$;

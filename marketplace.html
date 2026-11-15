@@ -324,7 +324,7 @@ renderFeatured();
 window.addEventListener('load',()=>{
 const p=new URLSearchParams(location.search),view=p.get('view'),q=p.get('q');
 if(q){const input=document.getElementById('query');if(input)input.value=q}
-if(view==='search')showListings();
+if(view==='search'){showListings();const propertyId=p.get('property');if(propertyId){let tries=0;const poll=setInterval(()=>{if(window.homesquareBackendReady){clearInterval(poll);viewProperty(propertyId)}else if(++tries>25)clearInterval(poll)},200)}}
 else if(view==='listing')openModal('listing');
 else if(view==='seller'||view==='dashboard')showDashboard();
 else if(view==='buyer')showBuyerDashboard();

@@ -56,3 +56,11 @@ Stripe is deliberately excluded. GitHub source code was updated for buyer/seller
 - 15/15 additional source checks passed (JavaScript syntax, integration hooks, RLS declarations, staff guard).
 - **Latest migration deployment, CI run, live browser tests and two-account RLS tests are still unverified**.
 - Do not publish customer listings until staff vetting, legal/privacy review and live security tests are completed.
+
+## Update — ownership evidence implementation
+- Added private ownership-evidence Storage bucket (PDF/JPG/PNG/WebP, max 10 MB).
+- Added seller evidence upload, short-lived staff viewing link and staff review UI.
+- Added database guard against owners self-verifying their declaration.
+- Staff verification now requires an uploaded evidence file. **Evidence presence is not proof of validity; staff must independently assess authenticity and seller authority.**
+- Added source assertions for privacy and verification controls.
+- **Still unverified:** new migrations deployed, storage policies functioning in Supabase, real two-account browser tests, and legal/privacy compliance.

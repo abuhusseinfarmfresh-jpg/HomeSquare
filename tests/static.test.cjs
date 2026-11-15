@@ -34,4 +34,10 @@ for(const name of ['staff_review_listing','staff_review_ownership','enforce_prop
 for(const table of ['staff_members','ownership_checks'])assert.ok(moderation.includes('alter table public.'+table+' enable row level security'),'Missing RLS '+table);
 for(const name of ['homesquareIsStaff','homesquareStaffQueue','homesquareReviewOwnership','homesquareReviewListing','homesquareDeletePhoto'])assert.ok(client.includes(name),'Missing client '+name);
 for(const name of ['showStaff()','showPhotos(id)','declareOwnership(id)'])assert.ok(html.includes(name),'Missing UI '+name);
+const evidence=fs.readFileSync('supabase/migrations/20261115040000_ownership_evidence.sql','utf8');
+assert.ok(evidence.includes("'ownership-evidence',false"),'Ownership evidence bucket must be private');
+assert.ok(evidence.includes('protect_ownership_review'),'Ownership self-verification must be blocked');
+assert.ok(evidence.includes('Supporting ownership evidence must be uploaded'),'Staff approval must require evidence');
+for(const fn of ['homesquareUploadOwnershipEvidence','homesquareGetOwnershipEvidence'])assert.ok(client.includes(fn),'Missing '+fn);
+for(const fn of ['uploadEvidence(id)','viewEvidence(id)'])assert.ok(html.includes(fn),'Missing '+fn);
 console.log('PASS: JS parses, server integrations present, RLS declared, unsafe publish removed');

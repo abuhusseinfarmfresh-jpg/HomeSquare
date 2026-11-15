@@ -52,9 +52,18 @@ async function submitEnquiry(e,id){e.preventDefault();if(window.homesquareBacken
 }
 async function viewActivity(id){
  $('overlay').classList.remove('hidden');$('modalTitle').textContent='Inspections and offers';$('modalBody').textContent='Loading…';
- try{const [inspections,offers]=await Promise.all([window.homesquareLoadInspections(id),window.homesquareLoadOffers(id)]);
- $('modalBody').innerHTML='<h3>Inspection requests</h3>'+(inspections.map(i=>'<p>'+escapeHTML(new Date(i.requested_at).toLocaleString('en-AU'))+' — '+escapeHTML(i.status)+' — '+escapeHTML(i.message)+'</p>').join('')||'<p>No requests</p>')+'<h3>Offers</h3>'+(offers.map(o=>'<p>'+money(o.amount)+' — '+escapeHTML(o.status)+' — '+escapeHTML(o.message)+'</p>').join('')||'<p>No offers</p>');
+ try{
+ const [inspections,offers]=await Promise.all([window.homesquareLoadInspections(id),window.homesquareLoadOffers(id)]);
+ const buttons=(type,record)=>((type==='inspection'&&record.status==='requested')||(type==='offer'&&record.status==='submitted'))?'<div class="row"><button class="btn alt" onclick="decideActivity(\''+type+'\',\''+record.id+'\',\'accepted\',\''+id+'\')">Accept</button><button class="btn alt" onclick="decideActivity(\''+type+'\',\''+record.id+'\',\'declined\',\''+id+'\')">Decline</button></div>':'';
+ $('modalBody').innerHTML='<h3>Inspection requests</h3>'+(inspections.map(i=>'<div class="dashboard"><p>'+escapeHTML(new Date(i.requested_at).toLocaleString('en-AU'))+' — '+escapeHTML(i.status)+' — '+escapeHTML(i.message)+'</p>'+buttons('inspection',i)+'</div>').join('')||'<p>No requests</p>')+'<h3>Offers</h3>'+(offers.map(o=>'<div class="dashboard"><p>'+money(o.amount)+' — '+escapeHTML(o.status)+' — '+escapeHTML(o.message)+'</p>'+buttons('offer',o)+'</div>').join('')||'<p>No offers</p>');
  }catch(e){$('modalBody').textContent=e.message}
+}
+async function decideActivity(type,id,decision,propertyId){
+ try{
+ if(type==='inspection')await window.homesquareDecideInspection(id,decision==='accepted'?'confirmed':'declined');
+ else await window.homesquareDecideOffer(id,decision);
+ await viewActivity(propertyId);
+ }catch(e){alert('Unable to update: '+e.message)}
 }
 async function viewConversations(id){
  $('overlay').classList.remove('hidden');$('modalTitle').textContent='Buyer conversations';$('modalBody').textContent='Loading…';
